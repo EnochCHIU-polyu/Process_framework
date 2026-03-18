@@ -11,11 +11,26 @@ class AuditType(Enum):
 
 
 class BadCaseCategory(Enum):
-    """Categories for bad case root cause analysis (錯誤歸因分類)."""
+    """Categories for bad case root cause analysis (錯誤歸因分類).
 
+    The three LENS-specific subcategories (FACTUAL, LOGICAL, REFERENTIAL) map
+    to the three hallucination layers defined in the LENS evaluation framework
+    (Chen et al., 2024 — DiaHalu):
+
+    * FACTUAL      — entity / factual inconsistency (LENS Layer 1)
+    * LOGICAL      — reasoning / coherence error    (LENS Layer 2)
+    * REFERENTIAL  — citation / attribution error   (LENS Layer 3)
+    """
+
+    # Original categories
     HALLUCINATION = "hallucination"            # 幻覺型：輸出不正確或捏造資訊
     INTENT_UNDERSTANDING = "intent_understanding"  # 意圖理解型：忽略關鍵限制詞
     USER_EXPERIENCE = "user_experience"        # 用戶體驗型：理解正確但表達差
+
+    # LENS-aligned hallucination subcategories (LENS Framework, Layer 1-3)
+    FACTUAL = "factual"           # 事實幻覺：entity/factual inconsistency
+    LOGICAL = "logical"           # 邏輯幻覺：reasoning/coherence error
+    REFERENTIAL = "referential"   # 引用幻覺：citation/attribution error
 
 
 class EvaluationDimension(Enum):
@@ -48,6 +63,12 @@ class EvaluationDimension(Enum):
 
     # Risk control (風險控制)
     SENSITIVE_TOPIC_INTERCEPTION = "sensitive_topic_interception"  # 隱私/敏感話題攔截率
+
+    # LENS-aligned hallucination evaluation dimensions (LENS Framework)
+    # Maps to the three layers used by LENS (Chen et al., 2024 — DiaHalu):
+    FACTUAL_GROUNDING = "factual_grounding"       # 事實依據 (LENS Layer 1 — entity consistency)
+    SEMANTIC_CORRECTNESS = "semantic_correctness"  # 語義正確性 (LENS Layer 2 — semantic accuracy)
+    REASONING_QUALITY = "reasoning_quality"        # 推理品質 (LENS Layer 3 — reasoning coherence)
 
 
 class ScoreLevel(Enum):

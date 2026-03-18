@@ -20,6 +20,7 @@ from process_framework.core import (
     EvaluationDimension,
     ScoreLevel,
     ReviewMethod,
+    ScenarioType,
     AuditScope,
     EvaluationCase,
     BadCase,
@@ -52,6 +53,7 @@ __all__ = [
     "EvaluationDimension",
     "ScoreLevel",
     "ReviewMethod",
+    "ScenarioType",
     # Core models
     "AuditScope",
     "EvaluationCase",

@@ -26,6 +26,19 @@ IMPROVEMENT_TEMPLATES: Dict[BadCaseCategory, str] = {
         "優化回覆格式與長度：使用 RLHF 或偏好數據微調，鼓勵模型輸出更簡潔、"
         "結構清晰的回覆。"
     ),
+    # LENS-aligned subcategories (LENS Framework — DiaHalu, EMNLP 2024)
+    BadCaseCategory.FACTUAL: (
+        "修正事實幻覺（LENS Layer 1）：引入實體一致性檢查和 RAG 機制，確保實體名稱、"
+        "日期和數字等事實資訊準確無誤。"
+    ),
+    BadCaseCategory.LOGICAL: (
+        "修正邏輯推理錯誤（LENS Layer 2）：增加邏輯一致性訓練數據和推理鏈驗證，"
+        "確保模型推理步驟前後連貫。"
+    ),
+    BadCaseCategory.REFERENTIAL: (
+        "修正引用歸因錯誤（LENS Layer 3）：加強來源引用核查，避免錯誤歸屬聲明，"
+        "並在輸出中明確標示不確定的引用。"
+    ),
 }
 
 
