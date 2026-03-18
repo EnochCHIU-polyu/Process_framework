@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: process-framework
+Version: 0.1.0
+Summary: PROCESS AI Review Framework — a seven-stage AI system evaluation and audit framework
+License: MIT
+Keywords: AI,evaluation,audit,LLM,hallucination,PROCESS
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0; extra == "dev"
+
+# Process_framework
