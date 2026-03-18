@@ -60,7 +60,10 @@ CREATE TABLE IF NOT EXISTS bad_cases (
     session_id       UUID NOT NULL REFERENCES chat_sessions (id) ON DELETE CASCADE,
     reason           TEXT NOT NULL,
     category         TEXT NOT NULL DEFAULT 'hallucination'
-                         CHECK (category IN ('hallucination', 'intent_understanding', 'user_experience')),
+                         CHECK (category IN (
+                             'hallucination', 'intent_understanding', 'user_experience',
+                             'factual', 'logical', 'referential'
+                         )),
     notes            TEXT,
     reviewer         TEXT,
     root_cause       TEXT,
