@@ -100,3 +100,28 @@ CREATE TABLE IF NOT EXISTS process_reports (
 
 CREATE INDEX IF NOT EXISTS idx_process_reports_session_id ON process_reports (session_id);
 CREATE INDEX IF NOT EXISTS idx_process_reports_created_at ON process_reports (created_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- 6. auto_audit_reports — 自動審計結果
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS auto_audit_reports (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id  TEXT,  -- 可能是 'all' 或特定 session_id
+    report      JSONB NOT NULL,  -- 包含幻覺檢測、低品質案例、微調數據集等
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_auto_audit_reports_session_id ON auto_audit_reports (session_id);
+CREATE INDEX IF NOT EXISTS idx_auto_audit_reports_created_at ON auto_audit_reports (created_at DESC);
+
+-- =============================================================================
+-- RLS Policies (Optional: Adjust based on your security requirements)
+-- =============================================================================
+
+-- Example: Allow read for authenticated users, write for service role
+-- ALTER TABLE chat_sessions ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
+-- etc.
+
+CREATE INDEX IF NOT EXISTS idx_process_reports_session_id ON process_reports (session_id);
+CREATE INDEX IF NOT EXISTS idx_process_reports_created_at ON process_reports (created_at DESC);

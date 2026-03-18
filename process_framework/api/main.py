@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from process_framework.api.config import Settings, get_settings
 from process_framework.api.routes.audit import router as audit_router
+from process_framework.api.routes.auto_audit import router as auto_audit_router
 from process_framework.api.routes.chat import router as chat_router
 from process_framework.api.routes.process import router as process_router
 
@@ -21,9 +22,9 @@ app = FastAPI(
     title="PROCESS Chat Auditing API",
     description=(
         "LLM chat service with Ollama/OpenAI backend, Supabase persistence, "
-        "hallucination marking, and PROCESS-framework pipeline integration."
+        "hallucination marking, PROCESS-framework pipeline, and automatic audit loop."
     ),
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -37,6 +38,7 @@ app.add_middleware(
 app.include_router(chat_router)
 app.include_router(audit_router)
 app.include_router(process_router)
+app.include_router(auto_audit_router)
 
 
 @app.get("/health")
