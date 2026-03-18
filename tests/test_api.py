@@ -1,0 +1,210 @@
+"""
+Tests for the PROCESS Chat Auditing API endpoints.
+
+All external HTTP calls (Ollama, Supabase) are mocked so the tests run
+without any live services.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+
+# ---------------------------------------------------------------------------
+# Helpers to stub Supabase / Ollama responses
+# ---------------------------------------------------------------------------
+
+def _ok_response(body: Any, status_code: int = 201) -> MagicMock:
+    """Return a mock httpx.Response with json() → body."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.json.return_value = body
+    resp.text = json.dumps(body)
+    resp.raise_for_status = MagicMock()
+    return resp
+
+
+def _ollama_response(content: str = "Paris is the capital of France.") -> MagicMock:
+    return _ok_response({"message": {"role": "assistant", "content": content}}, 200)
+
+
+def _supabase_insert_ok() -> MagicMock:
+    return _ok_response([], 201)
+
+
+def _supabase_session_ok() -> MagicMock:
+    resp = MagicMock()
+    resp.status_code = 201
+    resp.json.return_value = []
+    resp.text = "[]"
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def client(monkeypatch):
+    """TestClient with env vars patched so Settings can load."""
+    monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    monkeypatch.setenv("OLLAMA_MODEL", "llama3.1:8b")
+
+    # Import app AFTER env vars are set
+    from process_framework.api.main import app
+    return TestClient(app, raise_server_exceptions=True)
+
+
+# ---------------------------------------------------------------------------
+# /health
+# ---------------------------------------------------------------------------
+
+
+def test_health(client):
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# POST /chat
+# ---------------------------------------------------------------------------
+
+
+class TestChat:
+    def _make_async_client(self, ollama_resp, *supa_resps):
+        """Build a mock httpx.AsyncClient context manager."""
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=[ollama_resp, *supa_resps])
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=mock_client)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        return cm
+
+    def test_chat_returns_assistant_message(self, client):
+        with patch("process_framework.api.routes.chat.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = self._make_async_client(
+                _ollama_response("Paris is the capital of France."),
+                _supabase_session_ok(),   # upsert session
+                _supabase_insert_ok(),    # insert user message
+                _supabase_insert_ok(),    # insert assistant message
+                _supabase_insert_ok(),    # insert audit
+            )
+            resp = client.post(
+                "/chat",
+                json={"messages": [{"role": "user", "content": "Capital of France?"}]},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["assistant_message"] == "Paris is the capital of France."
+        assert "session_id" in data
+        assert "assistant_message_id" in data
+
+    def test_chat_reuses_provided_session_id(self, client):
+        session_id = "aaaabbbb-0000-0000-0000-000000000001"
+        with patch("process_framework.api.routes.chat.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = self._make_async_client(
+                _ollama_response("Hello!"),
+                _supabase_session_ok(),
+                _supabase_insert_ok(),
+                _supabase_insert_ok(),
+                _supabase_insert_ok(),
+            )
+            resp = client.post(
+                "/chat",
+                json={
+                    "session_id": session_id,
+                    "messages": [{"role": "user", "content": "Hi"}],
+                },
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["session_id"] == session_id
+
+    def test_chat_ollama_unavailable_returns_503(self, client):
+        import httpx
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(
+            side_effect=httpx.RequestError("Connection refused")
+        )
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=mock_client)
+        cm.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("process_framework.api.routes.chat.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = cm
+            resp = client.post(
+                "/chat",
+                json={"messages": [{"role": "user", "content": "Hi"}]},
+            )
+
+        assert resp.status_code == 503
+        assert "Ollama" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# POST /audit/{message_id}/mark-bad
+# ---------------------------------------------------------------------------
+
+
+class TestAuditEndpoint:
+    def _make_async_client(self, fetch_resp, *insert_resps):
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=fetch_resp)
+        mock_client.post = AsyncMock(side_effect=list(insert_resps))
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=mock_client)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        return cm
+
+    def _message_fetch_ok(self, message_id: str = "msg-001", session_id: str = "sess-001"):
+        return _ok_response(
+            [{"id": message_id, "session_id": session_id, "role": "assistant", "content": "Bad answer"}],
+            200,
+        )
+
+    def test_mark_bad_returns_ids(self, client):
+        msg_id = "aaaabbbb-0000-0000-0000-000000000002"
+        with patch("process_framework.api.routes.audit.httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value = self._make_async_client(
+                self._message_fetch_ok(msg_id),
+                _supabase_insert_ok(),  # bad_cases
+                _supabase_insert_ok(),  # ai_audits
+            )
+            resp = client.post(
+                f"/audit/{msg_id}/mark-bad",
+                json={"reason": "Fabricated fact", "category": "hallucination"},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["message_id"] == msg_id
+        assert data["status"] == "bad_case"
+        assert "bad_case_id" in data
+        assert "audit_id" in data
+
+    def test_mark_bad_message_not_found_returns_404(self, client):
+        with patch("process_framework.api.routes.audit.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=_ok_response([], 200))
+            cm = MagicMock()
+            cm.__aenter__ = AsyncMock(return_value=mock_client)
+            cm.__aexit__ = AsyncMock(return_value=False)
+            mock_cls.return_value = cm
+
+            resp = client.post(
+                "/audit/nonexistent-id/mark-bad",
+                json={"reason": "test"},
+            )
+
+        assert resp.status_code == 404

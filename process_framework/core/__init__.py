@@ -6,6 +6,7 @@ from process_framework.core.enums import (
     EvaluationDimension,
     ScoreLevel,
     ReviewMethod,
+    ScenarioType,
 )
 from process_framework.core.models import (
     AuditScope,
@@ -26,6 +27,7 @@ __all__ = [
     "EvaluationDimension",
     "ScoreLevel",
     "ReviewMethod",
+    "ScenarioType",
     "AuditScope",
     "EvaluationCase",
     "BadCase",
