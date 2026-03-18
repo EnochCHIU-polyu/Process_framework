@@ -135,6 +135,7 @@ class TestChat:
         session_id = "aaaabbbb-0000-0000-0000-000000000001"
         with (
             patch("process_framework.api.routes.chat.call_llm", new=AsyncMock(return_value="Hello!")),
+            patch("process_framework.api.routes.chat.build_session_guard", new=AsyncMock(return_value=None)),
             patch("process_framework.api.routes.chat.httpx.AsyncClient") as mock_cls,
         ):
             mock_cls.return_value = _supa_async_client(
