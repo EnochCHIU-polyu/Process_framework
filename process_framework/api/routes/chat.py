@@ -1,5 +1,9 @@
 """
-POST /chat  — send a chat message, get Ollama response, persist to Supabase.
+POST /chat  — send a chat message, get an LLM response, persist to Supabase.
+
+Supports two backends via the LLM_BACKEND setting:
+  - "ollama"  — local Ollama server (no API key needed)
+  - "openai"  — any OpenAI-compatible endpoint (Poe, OpenAI, Groq, etc.)
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from process_framework.api.config import Settings, get_settings
+from process_framework.api.llm import call_llm
 
 router = APIRouter()
 
@@ -146,45 +151,20 @@ async def chat(
     settings: Settings = Depends(get_settings),
 ) -> Any:
     """
-    Accept a conversation, call Ollama, persist to Supabase, return reply.
+    Accept a conversation, call the configured LLM backend, persist to Supabase, return reply.
 
-    - Ollama is called at ``OLLAMA_BASE_URL/api/chat``.
+    - Backend is selected by ``LLM_BACKEND``: ``"ollama"`` (default) or ``"openai"``.
     - Both the last user message and the assistant reply are persisted.
     - An ``ai_audits`` row with ``status=pending`` is created automatically.
     """
     session_id = req.session_id or str(uuid.uuid4())
 
-    # Build Ollama payload
-    ollama_payload: Dict[str, Any] = {
-        "model": settings.ollama_model,
-        "messages": [{"role": m.role, "content": m.content} for m in req.messages],
-        "stream": False,
-        "options": {"temperature": req.temperature},
-    }
+    # --- Call LLM (Ollama or OpenAI-compatible) ---
+    messages = [{"role": m.role, "content": m.content} for m in req.messages]
+    assistant_text = await call_llm(messages, settings, req.temperature)
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        # --- Call Ollama ---
-        try:
-            ollama_resp = await client.post(
-                f"{settings.ollama_base_url}/api/chat",
-                json=ollama_payload,
-            )
-            ollama_resp.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Ollama error {exc.response.status_code}: {exc.response.text}",
-            ) from exc
-        except httpx.RequestError as exc:
-            raise HTTPException(
-                status_code=503,
-                detail=f"Cannot reach Ollama at {settings.ollama_base_url}: {exc}",
-            ) from exc
-
-        data = ollama_resp.json()
-        assistant_text: str = data["message"]["content"]
-
-        # --- Persist to Supabase ---
+    # --- Persist to Supabase ---
+    async with httpx.AsyncClient(timeout=30.0) as client:
         await _upsert_session(
             client, settings, session_id, req.user_id, req.room_id
         )

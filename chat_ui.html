@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PROCESS Chat — Local LLM Demo</title>
+  <title>PROCESS Chat</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -21,6 +21,26 @@
       gap: 1rem;
     }
     h1 { font-size: 1.4rem; color: #1a1a2e; }
+    #backend-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: #e0f2fe;
+      border: 1px solid #bae6fd;
+      border-radius: 6px;
+      padding: 0.5rem 0.8rem;
+      font-size: 0.88rem;
+    }
+    #backend-bar label { font-weight: 600; white-space: nowrap; }
+    #backend-bar select, #backend-bar input {
+      padding: 0.3rem 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 0.88rem;
+    }
+    #backend-bar select { min-width: 110px; }
+    #backend-bar input  { flex: 1; }
+    #backend-hint { font-size: 0.78rem; color: #64748b; }
     #chat-box {
       background: #fff;
       border: 1px solid #ddd;
@@ -115,7 +135,17 @@
 </head>
 <body>
 <div id="app">
-  <h1>🤖 PROCESS Chat — Local LLM Demo</h1>
+  <h1>🤖 PROCESS Chat</h1>
+
+  <!-- Backend info bar (read-only display — backend is set server-side via env vars) -->
+  <div id="backend-bar">
+    <label>Backend:</label>
+    <select id="backend-display" disabled>
+      <option value="ollama">🖥️ Ollama (local)</option>
+      <option value="openai">☁️ OpenAI-compatible (Poe / GPT / …)</option>
+    </select>
+    <span id="backend-hint">Configure via LLM_BACKEND in server .env</span>
+  </div>
 
   <div id="chat-box"></div>
 
@@ -160,6 +190,18 @@
   const API_BASE = "http://localhost:8000";  // Change if your server runs elsewhere
   let sessionId = null;
   const history = [];  // [{role, content}]
+
+  // Probe the /health endpoint to learn the active backend
+  (async () => {
+    try {
+      const r = await fetch(`${API_BASE}/health`);
+      if (r.ok) {
+        const data = await r.json();
+        const sel = document.getElementById("backend-display");
+        if (data.llm_backend === "openai") sel.value = "openai";
+      }
+    } catch (_) { /* server unreachable — leave default */ }
+  })();
 
   function setStatus(msg) {
     document.getElementById("status").textContent = msg;

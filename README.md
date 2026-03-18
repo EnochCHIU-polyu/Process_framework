@@ -53,17 +53,18 @@ pip install -e ".[api,dev]"
 
 ## Chat Auditing API
 
-A FastAPI service that wraps Ollama for local-LLM chat, persists every
-conversation turn to Supabase, and surfaces PROCESS-framework auditing
-(including hallucination marking).
+A FastAPI service that connects to an LLM backend (Ollama **or** any
+OpenAI-compatible endpoint such as Poe), persists every conversation turn
+to Supabase, and surfaces PROCESS-framework auditing (including hallucination
+marking).
 
 ### Prerequisites
 
 | Requirement | Notes |
 |-------------|-------|
 | Python ≥ 3.9 | — |
-| [Ollama](https://ollama.ai) running locally | `ollama run llama3.1:8b` |
 | Supabase project | Free tier works fine |
+| **One** LLM backend (see below) | Ollama *or* Poe/OpenAI/etc. |
 
 ### Environment Variables
 
@@ -77,12 +78,49 @@ cp .env.example .env
 |----------|----------|---------|-------------|
 | `SUPABASE_URL` | ✅ | — | Your Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | — | Service-role key (keep secret!) |
-| `OLLAMA_BASE_URL` | — | `http://localhost:11434` | Ollama server base URL |
-| `OLLAMA_MODEL` | — | `llama3.1:8b` | Ollama model name |
+| `LLM_BACKEND` | — | `ollama` | `"ollama"` or `"openai"` |
+| `OLLAMA_BASE_URL` | — | `http://localhost:11434` | Used when `LLM_BACKEND=ollama` |
+| `OLLAMA_MODEL` | — | `llama3.1:8b` | Used when `LLM_BACKEND=ollama` |
+| `OPENAI_API_KEY` | ✅ if openai | — | API key for OpenAI-compatible endpoint |
+| `OPENAI_BASE_URL` | — | `https://api.poe.com/v1` | Used when `LLM_BACKEND=openai` |
+| `OPENAI_MODEL` | — | `deepseek-v3.2` | Used when `LLM_BACKEND=openai` |
 | `CORS_ORIGINS` | — | `["*"]` | Allowed CORS origins (JSON array) |
 
-> ⚠️ **Never expose `SUPABASE_SERVICE_ROLE_KEY` to the browser.**
-> The API server is the only process that should hold this key.
+> ⚠️ **Never expose `SUPABASE_SERVICE_ROLE_KEY` or `OPENAI_API_KEY` to the browser.**
+
+### LLM Backend Options
+
+#### Option A — Ollama (local, no API key)
+
+```bash
+# 1. Install Ollama and pull the model
+ollama pull llama3.1:8b
+
+# 2. Set in .env:
+LLM_BACKEND=ollama
+OLLAMA_MODEL=llama3.1:8b
+```
+
+#### Option B — Poe API (cloud, no local model needed)
+
+```bash
+# Set in .env:
+LLM_BACKEND=openai
+OPENAI_API_KEY=your_poe_api_key
+OPENAI_BASE_URL=https://api.poe.com/v1
+OPENAI_MODEL=deepseek-v3.2          # or gpt-4o, claude-3-7-sonnet, etc.
+```
+
+Any OpenAI-compatible endpoint works here (OpenAI, Azure OpenAI, Groq, Together AI, etc.).
+
+#### Option C — OpenAI directly
+
+```bash
+LLM_BACKEND=openai
+OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o
+```
 
 ### Supabase SQL Migration
 
@@ -183,15 +221,18 @@ start chat_ui.html         # Windows
 ```
 
 The UI provides:
-- Chat input with real-time responses from Ollama via the API
+- Chat input with real-time responses via the API
 - A **⚑ Flag** button on every assistant message to mark hallucinations
 - A modal form for capturing category, keywords, and reviewer
+- Backend indicator (Ollama / OpenAI-compatible) auto-detected from `/health`
 
 ### Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
 | `503 Cannot reach Ollama` | Make sure `ollama serve` is running and `OLLAMA_BASE_URL` is correct |
+| `503 Cannot reach OpenAI-compatible API` | Check `OPENAI_BASE_URL` and network connectivity |
+| `500 OPENAI_API_KEY is not configured` | Set `OPENAI_API_KEY` in your `.env` file |
 | `502 Supabase upsert session failed` | Check `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`; verify tables exist |
 | `404 Message not found` | The `message_id` doesn't exist in `chat_messages`; call `/chat` first |
 | CORS errors in browser | Set `CORS_ORIGINS` to your frontend origin, e.g. `["http://localhost:3000"]` |

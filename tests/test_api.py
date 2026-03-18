@@ -1,7 +1,7 @@
 """
 Tests for the PROCESS Chat Auditing API endpoints.
 
-All external HTTP calls (Ollama, Supabase) are mocked so the tests run
+All external HTTP calls (Ollama, Supabase, OpenAI) are mocked so the tests run
 without any live services.
 """
 
@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 
 # ---------------------------------------------------------------------------
-# Helpers to stub Supabase / Ollama responses
+# Helpers to stub Supabase responses
 # ---------------------------------------------------------------------------
 
 def _ok_response(body: Any, status_code: int = 201) -> MagicMock:
@@ -27,10 +27,6 @@ def _ok_response(body: Any, status_code: int = 201) -> MagicMock:
     resp.text = json.dumps(body)
     resp.raise_for_status = MagicMock()
     return resp
-
-
-def _ollama_response(content: str = "Paris is the capital of France.") -> MagicMock:
-    return _ok_response({"message": {"role": "assistant", "content": content}}, 200)
 
 
 def _supabase_insert_ok() -> MagicMock:
@@ -45,6 +41,16 @@ def _supabase_session_ok() -> MagicMock:
     return resp
 
 
+def _supa_async_client(*responses):
+    """Build a mock httpx.AsyncClient context manager for Supabase calls only."""
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(side_effect=list(responses))
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=mock_client)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    return cm
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -52,13 +58,28 @@ def _supabase_session_ok() -> MagicMock:
 
 @pytest.fixture()
 def client(monkeypatch):
-    """TestClient with env vars patched so Settings can load."""
+    """TestClient with env vars patched so Settings can load (Ollama backend)."""
     monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
     monkeypatch.setenv("OLLAMA_MODEL", "llama3.1:8b")
+    monkeypatch.setenv("LLM_BACKEND", "ollama")
 
     # Import app AFTER env vars are set
+    from process_framework.api.main import app
+    return TestClient(app, raise_server_exceptions=True)
+
+
+@pytest.fixture()
+def openai_client(monkeypatch):
+    """TestClient configured to use the OpenAI-compatible backend."""
+    monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
+    monkeypatch.setenv("LLM_BACKEND", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-poe-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.poe.com/v1")
+    monkeypatch.setenv("OPENAI_MODEL", "deepseek-v3.2")
+
     from process_framework.api.main import app
     return TestClient(app, raise_server_exceptions=True)
 
@@ -71,28 +92,29 @@ def client(monkeypatch):
 def test_health(client):
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["llm_backend"] == "ollama"
+
+
+def test_health_openai_backend(openai_client):
+    resp = openai_client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["llm_backend"] == "openai"
 
 
 # ---------------------------------------------------------------------------
-# POST /chat
+# POST /chat  —  Ollama backend
 # ---------------------------------------------------------------------------
 
 
 class TestChat:
-    def _make_async_client(self, ollama_resp, *supa_resps):
-        """Build a mock httpx.AsyncClient context manager."""
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(side_effect=[ollama_resp, *supa_resps])
-        cm = MagicMock()
-        cm.__aenter__ = AsyncMock(return_value=mock_client)
-        cm.__aexit__ = AsyncMock(return_value=False)
-        return cm
-
     def test_chat_returns_assistant_message(self, client):
-        with patch("process_framework.api.routes.chat.httpx.AsyncClient") as mock_cls:
-            mock_cls.return_value = self._make_async_client(
-                _ollama_response("Paris is the capital of France."),
+        with (
+            patch("process_framework.api.routes.chat.call_llm", new=AsyncMock(return_value="Paris is the capital of France.")),
+            patch("process_framework.api.routes.chat.httpx.AsyncClient") as mock_cls,
+        ):
+            mock_cls.return_value = _supa_async_client(
                 _supabase_session_ok(),   # upsert session
                 _supabase_insert_ok(),    # insert user message
                 _supabase_insert_ok(),    # insert assistant message
@@ -111,9 +133,11 @@ class TestChat:
 
     def test_chat_reuses_provided_session_id(self, client):
         session_id = "aaaabbbb-0000-0000-0000-000000000001"
-        with patch("process_framework.api.routes.chat.httpx.AsyncClient") as mock_cls:
-            mock_cls.return_value = self._make_async_client(
-                _ollama_response("Hello!"),
+        with (
+            patch("process_framework.api.routes.chat.call_llm", new=AsyncMock(return_value="Hello!")),
+            patch("process_framework.api.routes.chat.httpx.AsyncClient") as mock_cls,
+        ):
+            mock_cls.return_value = _supa_async_client(
                 _supabase_session_ok(),
                 _supabase_insert_ok(),
                 _supabase_insert_ok(),
@@ -130,19 +154,13 @@ class TestChat:
         assert resp.status_code == 200
         assert resp.json()["session_id"] == session_id
 
-    def test_chat_ollama_unavailable_returns_503(self, client):
-        import httpx
+    def test_chat_llm_error_propagates(self, client):
+        from fastapi import HTTPException
 
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(
-            side_effect=httpx.RequestError("Connection refused")
-        )
-        cm = MagicMock()
-        cm.__aenter__ = AsyncMock(return_value=mock_client)
-        cm.__aexit__ = AsyncMock(return_value=False)
+        async def _failing_llm(*args, **kwargs):
+            raise HTTPException(status_code=503, detail="Cannot reach Ollama at http://localhost:11434: Connection refused")
 
-        with patch("process_framework.api.routes.chat.httpx.AsyncClient") as mock_cls:
-            mock_cls.return_value = cm
+        with patch("process_framework.api.routes.chat.call_llm", new=_failing_llm):
             resp = client.post(
                 "/chat",
                 json={"messages": [{"role": "user", "content": "Hi"}]},
@@ -150,6 +168,81 @@ class TestChat:
 
         assert resp.status_code == 503
         assert "Ollama" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# POST /chat  —  OpenAI-compatible backend (Poe)
+# ---------------------------------------------------------------------------
+
+
+class TestChatOpenAI:
+    def test_chat_openai_backend_returns_message(self, openai_client):
+        """OpenAI-compatible path returns assistant text from the mock."""
+        with (
+            patch("process_framework.api.routes.chat.call_llm", new=AsyncMock(return_value="黑洞是宇宙中引力最強的地方。")),
+            patch("process_framework.api.routes.chat.httpx.AsyncClient") as mock_cls,
+        ):
+            mock_cls.return_value = _supa_async_client(
+                _supabase_session_ok(),
+                _supabase_insert_ok(),
+                _supabase_insert_ok(),
+                _supabase_insert_ok(),
+            )
+            resp = openai_client.post(
+                "/chat",
+                json={"messages": [{"role": "user", "content": "用一個10歲孩子也能理解的方式解釋黑洞的概念"}]},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["assistant_message"] == "黑洞是宇宙中引力最強的地方。"
+        assert "assistant_message_id" in data
+
+    def test_chat_openai_missing_api_key_returns_500(self, monkeypatch):
+        """Missing OPENAI_API_KEY with openai backend → 500."""
+        monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+        monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
+        monkeypatch.setenv("LLM_BACKEND", "openai")
+        # Deliberately do NOT set OPENAI_API_KEY
+
+        from process_framework.api.main import app
+        test_client = TestClient(app, raise_server_exceptions=False)
+        resp = test_client.post(
+            "/chat",
+            json={"messages": [{"role": "user", "content": "Hi"}]},
+        )
+        assert resp.status_code == 500
+        assert "OPENAI_API_KEY" in resp.json()["detail"]
+
+    def test_chat_openai_connection_error_returns_503(self, openai_client):
+        """Network failure on the OpenAI endpoint → 503."""
+        from fastapi import HTTPException
+
+        async def _conn_error(*args, **kwargs):
+            raise HTTPException(status_code=503, detail="Cannot reach OpenAI-compatible API at https://api.poe.com/v1: unreachable")
+
+        with patch("process_framework.api.routes.chat.call_llm", new=_conn_error):
+            resp = openai_client.post(
+                "/chat",
+                json={"messages": [{"role": "user", "content": "Hi"}]},
+            )
+
+        assert resp.status_code == 503
+
+    def test_llm_backend_unknown_returns_500(self, monkeypatch):
+        """Unknown LLM_BACKEND value → 500."""
+        monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+        monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
+        monkeypatch.setenv("LLM_BACKEND", "unknown_backend")
+
+        from process_framework.api.main import app
+        test_client = TestClient(app, raise_server_exceptions=False)
+        resp = test_client.post(
+            "/chat",
+            json={"messages": [{"role": "user", "content": "Hi"}]},
+        )
+        assert resp.status_code == 500
+        assert "LLM_BACKEND" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
