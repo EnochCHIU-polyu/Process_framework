@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PROCESS Workflow Dashboard</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: system-ui, sans-serif;
+        background: #f0f4f8;
+        color: #1a1a2e;
+        min-height: 100vh;
+      }
+
+      /* ── Top nav ── */
+      header {
+        background: #1a1a2e;
+        color: #fff;
+        padding: 0.75rem 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+      header h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.03em; }
+      header nav a {
+        color: #93c5fd;
+        text-decoration: none;
+        font-size: 0.9rem;
+        padding: 0.3rem 0.7rem;
+        border-radius: 4px;
+        transition: background 0.15s;
+      }
+      header nav a:hover { background: rgba(255,255,255,0.1); }
+
+      /* ── Layout ── */
+      main {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 1.5rem 1rem 3rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+
+      /* ── Control panel ── */
+      .control-panel {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 1.25rem 1.5rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.8rem;
+        align-items: flex-end;
+      }
+      .field { display: flex; flex-direction: column; gap: 0.3rem; }
+      .field label { font-size: 0.82rem; font-weight: 600; color: #475569; }
+      .field input, .field select {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        min-width: 220px;
+        background: #f8fafc;
+      }
+      .field input:focus, .field select:focus {
+        outline: 2px solid #3b82f6;
+        outline-offset: 1px;
+      }
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.88rem;
+        color: #334155;
+        padding-bottom: 0.15rem;
+      }
+      .toggle-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+      button.run-btn {
+        padding: 0.55rem 1.4rem;
+        background: #2563eb;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 600;
+        white-space: nowrap;
+        align-self: flex-end;
+        transition: background 0.15s;
+      }
+      button.run-btn:hover { background: #1d4ed8; }
+      button.run-btn:disabled { background: #93c5fd; cursor: not-allowed; }
+
+      /* ── Backend info ── */
+      #backend-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.3rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        background: #dbeafe;
+        color: #1e40af;
+        border: 1px solid #bfdbfe;
+      }
+      #backend-badge.openai { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+
+      /* ── Status bar ── */
+      #status-bar {
+        font-size: 0.85rem;
+        color: #64748b;
+        min-height: 1.2rem;
+        padding: 0 0.25rem;
+      }
+      #status-bar.error { color: #dc2626; }
+      #status-bar.success { color: #16a34a; }
+
+      /* ── Summary card ── */
+      .summary-card {
+        background: #1a1a2e;
+        color: #fff;
+        border-radius: 10px;
+        padding: 1.25rem 1.5rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+        align-items: center;
+      }
+      .summary-card h2 { font-size: 1rem; opacity: 0.8; flex-basis: 100%; }
+      .summary-stat { text-align: center; }
+      .summary-stat .val {
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1;
+      }
+      .summary-stat .lbl { font-size: 0.75rem; opacity: 0.7; margin-top: 0.2rem; }
+      .risk-pill {
+        display: inline-block;
+        padding: 0.3rem 1rem;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 1rem;
+        letter-spacing: 0.05em;
+      }
+      .risk-HIGH  { background: #fee2e2; color: #991b1b; }
+      .risk-MEDIUM{ background: #fef9c3; color: #92400e; }
+      .risk-LOW   { background: #dcfce7; color: #166534; }
+      .risk-NA    { background: #f1f5f9; color: #475569; }
+
+      /* ── PROCESS pipeline ── */
+      .pipeline-track {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .stage-tab {
+        flex: 1 1 0;
+        min-width: 120px;
+        padding: 0.75rem 0.5rem;
+        text-align: center;
+        border-right: 1px solid #e2e8f0;
+        cursor: pointer;
+        transition: background 0.15s;
+        position: relative;
+      }
+      .stage-tab:last-child { border-right: none; }
+      .stage-tab:hover { background: #f1f5f9; }
+      .stage-tab.active { background: #eff6ff; border-bottom: 3px solid #2563eb; }
+      .stage-tab.done  { background: #f0fdf4; }
+      .stage-tab.error-state { background: #fff1f2; }
+      .stage-letter {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #2563eb;
+        line-height: 1;
+      }
+      .stage-tab.done   .stage-letter { color: #16a34a; }
+      .stage-tab.error-state .stage-letter { color: #dc2626; }
+      .stage-name { font-size: 0.7rem; color: #64748b; margin-top: 0.2rem; }
+      .stage-badge {
+        position: absolute;
+        top: 6px; right: 6px;
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        background: #d1d5db;
+      }
+      .stage-tab.done   .stage-badge { background: #22c55e; }
+      .stage-tab.error-state .stage-badge { background: #ef4444; }
+      .stage-tab.loading .stage-badge { background: #f59e0b; animation: pulse 1s infinite; }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+      }
+
+      /* ── Stage detail panels ── */
+      .stage-panels { display: flex; flex-direction: column; gap: 1rem; }
+      .stage-panel {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        overflow: hidden;
+        display: none;
+      }
+      .stage-panel.visible { display: block; }
+      .stage-panel-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.9rem 1.25rem;
+        background: #f8fafc;
+        border-bottom: 1px solid #e2e8f0;
+        cursor: pointer;
+        user-select: none;
+      }
+      .stage-panel-letter {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #2563eb;
+        width: 36px;
+        text-align: center;
+      }
+      .stage-panel-title { flex: 1; font-weight: 600; font-size: 0.95rem; }
+      .stage-panel-risk { }
+      .chevron { color: #94a3b8; font-size: 1rem; transition: transform 0.2s; }
+      .stage-panel.collapsed .chevron { transform: rotate(-90deg); }
+      .stage-panel-body { padding: 1.25rem; }
+      .stage-panel.collapsed .stage-panel-body { display: none; }
+
+      .summary-text {
+        background: #f8fafc;
+        border-left: 3px solid #3b82f6;
+        padding: 0.6rem 0.9rem;
+        font-size: 0.88rem;
+        color: #334155;
+        border-radius: 0 4px 4px 0;
+        margin-bottom: 1rem;
+      }
+      .section-label {
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #64748b;
+        margin-bottom: 0.4rem;
+      }
+      .actions-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+      .actions-list li {
+        display: flex;
+        gap: 0.5rem;
+        align-items: flex-start;
+        font-size: 0.88rem;
+      }
+      .actions-list li::before {
+        content: "→";
+        color: #f59e0b;
+        font-weight: 700;
+        flex-shrink: 0;
+        margin-top: 0.05rem;
+      }
+      .data-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 0.6rem;
+        margin-top: 0.6rem;
+      }
+      .data-cell {
+        background: #f1f5f9;
+        border-radius: 6px;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.83rem;
+      }
+      .data-cell strong { display: block; font-size: 0.72rem; color: #64748b; margin-bottom: 0.15rem; }
+      details.raw-data { margin-top: 0.75rem; }
+      details.raw-data summary {
+        cursor: pointer;
+        font-size: 0.78rem;
+        color: #6366f1;
+        font-weight: 600;
+      }
+      details.raw-data pre {
+        margin-top: 0.4rem;
+        background: #1e293b;
+        color: #e2e8f0;
+        border-radius: 6px;
+        padding: 0.75rem;
+        font-size: 0.75rem;
+        overflow-x: auto;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+
+      /* ── History list ── */
+      .history-section { }
+      .history-section h3 { font-size: 0.9rem; font-weight: 700; color: #475569; margin-bottom: 0.5rem; }
+      .history-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+      }
+      .history-list li {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 0.55rem 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: background 0.12s;
+      }
+      .history-list li:hover { background: #eff6ff; }
+      .history-list .ts { color: #94a3b8; font-size: 0.78rem; flex: 1; }
+
+      /* ── Loader ── */
+      .spinner {
+        display: inline-block;
+        width: 14px; height: 14px;
+        border: 2px solid #bfdbfe;
+        border-top-color: #2563eb;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+        vertical-align: middle;
+        margin-right: 0.3rem;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* ── Empty state ── */
+      .empty {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: #94a3b8;
+        font-size: 0.95rem;
+      }
+      .empty .icon { font-size: 3rem; margin-bottom: 0.5rem; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>⚙️ PROCESS Workflow Dashboard</h1>
+      <nav>
+        <span id="backend-badge">🖥️ Ollama</span>
+        &nbsp;
+        <a href="chat_ui.html">💬 Chat</a>
+      </nav>
+    </header>
+
+    <main>
+      <!-- ── Control panel ── -->
+      <div class="control-panel">
+        <div class="field">
+          <label for="session-input">Session ID</label>
+          <input id="session-input" type="text" placeholder="Paste session UUID…" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <div class="toggle-row">
+            <input type="checkbox" id="auto-eval-chk" />
+            <label for="auto-eval-chk">LLM Auto-Evaluate (Poe / Ollama)</label>
+          </div>
+        </div>
+        <button class="run-btn" id="run-btn" onclick="runProcess()">▶ Run PROCESS</button>
+        <button class="run-btn" id="load-btn" style="background:#475569" onclick="loadReport()">📋 Load Report</button>
+      </div>
+
+      <div id="status-bar"></div>
+
+      <!-- ── PROCESS pipeline tabs ── -->
+      <div class="pipeline-track" id="pipeline-track">
+        <div class="stage-tab" id="tab-P" onclick="scrollToStage('P')">
+          <div class="stage-badge"></div>
+          <div class="stage-letter">P</div>
+          <div class="stage-name">Purpose</div>
+        </div>
+        <div class="stage-tab" id="tab-R" onclick="scrollToStage('R')">
+          <div class="stage-badge"></div>
+          <div class="stage-letter">R</div>
+          <div class="stage-name">Resources</div>
+        </div>
+        <div class="stage-tab" id="tab-O" onclick="scrollToStage('O')">
+          <div class="stage-badge"></div>
+          <div class="stage-letter">O</div>
+          <div class="stage-name">Optimization</div>
+        </div>
+        <div class="stage-tab" id="tab-C" onclick="scrollToStage('C')">
+          <div class="stage-badge"></div>
+          <div class="stage-letter">C</div>
+          <div class="stage-name">Count</div>
+        </div>
+        <div class="stage-tab" id="tab-E" onclick="scrollToStage('E')">
+          <div class="stage-badge"></div>
+          <div class="stage-letter">E</div>
+          <div class="stage-name">Effectiveness</div>
+        </div>
+        <div class="stage-tab" id="tab-S1" onclick="scrollToStage('S1')">
+          <div class="stage-badge"></div>
+          <div class="stage-letter">S</div>
+          <div class="stage-name">Standards</div>
+        </div>
+        <div class="stage-tab" id="tab-S2" onclick="scrollToStage('S2')">
+          <div class="stage-badge"></div>
+          <div class="stage-letter">S</div>
+          <div class="stage-name">Scrutiny</div>
+        </div>
+      </div>
+
+      <!-- ── Overall summary ── -->
+      <div id="summary-card" style="display:none" class="summary-card">
+        <h2>Overall Audit Summary</h2>
+        <div class="summary-stat">
+          <div class="val" id="sum-cases">—</div>
+          <div class="lbl">Cases Evaluated</div>
+        </div>
+        <div class="summary-stat">
+          <div class="val" id="sum-bad">—</div>
+          <div class="lbl">Bad Cases</div>
+        </div>
+        <div class="summary-stat">
+          <div class="val" id="sum-score">—</div>
+          <div class="lbl">Avg Score / 5</div>
+        </div>
+        <div class="summary-stat">
+          <div class="val" id="sum-pass">—</div>
+          <div class="lbl">Pass Rate</div>
+        </div>
+        <div class="summary-stat">
+          <div class="lbl" style="margin-bottom:0.3rem">Risk Level</div>
+          <span class="risk-pill risk-NA" id="sum-risk">N/A</span>
+        </div>
+      </div>
+
+      <!-- ── Stage detail panels ── -->
+      <div class="stage-panels" id="stage-panels">
+        <div class="empty" id="empty-state">
+          <div class="icon">📊</div>
+          Enter a session ID and click <strong>Run PROCESS</strong> to analyze a conversation,<br>
+          or paste a report ID and click <strong>Load Report</strong> to view a saved report.
+        </div>
+      </div>
+
+      <!-- ── Report history ── -->
+      <div class="history-section" id="history-section" style="display:none">
+        <h3>📁 Previous Reports for This Session</h3>
+        <ul class="history-list" id="history-list"></ul>
+      </div>
+    </main>
+
+    <script>
+      const API_BASE = "http://localhost:8000";
+
+      // ── Backend probe ──────────────────────────────────────────────
+      (async () => {
+        try {
+          const r = await fetch(`${API_BASE}/health`);
+          if (r.ok) {
+            const d = await r.json();
+            const badge = document.getElementById("backend-badge");
+            if (d.llm_backend === "openai") {
+              badge.textContent = "☁️ OpenAI / Poe";
+              badge.classList.add("openai");
+            } else {
+              badge.textContent = "🖥️ Ollama (local)";
+            }
+          }
+        } catch (_) { /* server offline */ }
+      })();
+
+      // ── Helpers ────────────────────────────────────────────────────
+      function setStatus(msg, type = "") {
+        const el = document.getElementById("status-bar");
+        el.textContent = msg;
+        el.className = type;
+      }
+
+      function riskClass(level) {
+        if (!level || level === "N/A") return "risk-NA";
+        return `risk-${level}`;
+      }
+
+      function fmtDate(iso) {
+        if (!iso) return "—";
+        try { return new Date(iso).toLocaleString(); } catch { return iso; }
+      }
+
+      // ── Tab helpers ────────────────────────────────────────────────
+      const stageKeys = ["P", "R", "O", "C", "E", "S1", "S2"];
+
+      function resetTabs() {
+        stageKeys.forEach(k => {
+          const t = document.getElementById(`tab-${k}`);
+          if (t) { t.className = "stage-tab"; }
+        });
+      }
+
+      function markTabDone(key) {
+        const t = document.getElementById(`tab-${key}`);
+        if (t) t.classList.add("done");
+      }
+
+      function markTabLoading(key) {
+        const t = document.getElementById(`tab-${key}`);
+        if (t) t.classList.add("loading");
+      }
+
+      function scrollToStage(key) {
+        const el = document.getElementById(`panel-${key}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      // ── Build stage panel HTML ─────────────────────────────────────
+      function buildPanel(key, letter, title, sectionData) {
+        const risk = sectionData?.risk_level || "N/A";
+        const summary = sectionData?.summary || "";
+        const actions = sectionData?.improvement_actions || [];
+        const data = sectionData?.data || {};
+
+        const dataItems = Object.entries(data)
+          .filter(([k, v]) => typeof v !== "object" && v !== null)
+          .map(([k, v]) => `
+            <div class="data-cell">
+              <strong>${k.replace(/_/g, " ")}</strong>
+              ${v ?? "—"}
+            </div>`).join("");
+
+        const actionItems = actions.map(a => `<li>${a}</li>`).join("");
+
+        return `
+        <div class="stage-panel visible" id="panel-${key}">
+          <div class="stage-panel-header" onclick="togglePanel('${key}')">
+            <span class="stage-panel-letter">${letter}</span>
+            <span class="stage-panel-title">${title}</span>
+            <span class="risk-pill ${riskClass(risk)}" style="font-size:0.78rem;padding:0.2rem 0.7rem">${risk}</span>
+            <span class="chevron">▾</span>
+          </div>
+          <div class="stage-panel-body">
+            ${summary ? `<div class="summary-text">${summary}</div>` : ""}
+            ${dataItems ? `
+              <div class="section-label">Key Metrics</div>
+              <div class="data-grid">${dataItems}</div>
+            ` : ""}
+            ${actionItems ? `
+              <div class="section-label" style="margin-top:1rem">Improvement Actions</div>
+              <ul class="actions-list">${actionItems}</ul>
+            ` : ""}
+            <details class="raw-data">
+              <summary>Raw data</summary>
+              <pre>${JSON.stringify(data, null, 2)}</pre>
+            </details>
+          </div>
+        </div>`;
+      }
+
+      function togglePanel(key) {
+        const panel = document.getElementById(`panel-${key}`);
+        if (panel) panel.classList.toggle("collapsed");
+      }
+
+      // ── Render full report ─────────────────────────────────────────
+      function renderReport(data) {
+        const sections = data.sections || {};
+        const stageMap = [
+          ["P",  "P", "Purpose — Audit Scope & KPI",        sections.P_Purpose],
+          ["R",  "R", "Resources — Evaluation Dataset",     sections.R_Resources],
+          ["O",  "O", "Optimization — Bad Case Analysis",   sections.O_Optimization],
+          ["C",  "C", "Count — Evaluation Planning",        sections.C_Count],
+          ["E",  "E", "Effectiveness — Multi-dim Scores",   sections.E_Effectiveness],
+          ["S1", "S", "Standards — Scoring Handbook",       sections.S_Standards],
+          ["S2", "S", "Scrutiny — Review Pipeline",         sections.S_Scrutiny],
+        ];
+
+        resetTabs();
+        document.getElementById("empty-state")?.remove();
+
+        const container = document.getElementById("stage-panels");
+        // Remove old panels
+        container.querySelectorAll(".stage-panel").forEach(p => p.remove());
+
+        stageMap.forEach(([key, letter, title, sec]) => {
+          if (!sec) return;
+          const html = buildPanel(key, letter, title, sec);
+          container.insertAdjacentHTML("beforeend", html);
+          markTabDone(key);
+        });
+
+        // Summary card
+        const sc = document.getElementById("summary-card");
+        sc.style.display = "flex";
+
+        const badReport  = sections.O_Optimization?.data || {};
+        const effReport  = sections.E_Effectiveness?.data  || {};
+        const scrReport  = sections.S_Scrutiny?.data       || {};
+        const planData   = sections.P_Purpose?.data        || {};
+
+        document.getElementById("sum-cases").textContent =
+          planData.total_sample_size ?? effReport.total_evaluated ?? "—";
+        document.getElementById("sum-bad").textContent =
+          badReport.total_bad_cases ?? "—";
+        document.getElementById("sum-score").textContent =
+          effReport.overall_score != null ? effReport.overall_score.toFixed(2) : "—";
+        document.getElementById("sum-pass").textContent =
+          effReport.pass_rate != null
+            ? `${(effReport.pass_rate * 100).toFixed(1)}%`
+            : scrReport.pass_rate != null
+            ? `${(scrReport.pass_rate * 100).toFixed(1)}%`
+            : "—";
+
+        const risk = data.overall_risk_level || "N/A";
+        const riskEl = document.getElementById("sum-risk");
+        riskEl.textContent = risk;
+        riskEl.className = `risk-pill ${riskClass(risk)}`;
+      }
+
+      // ── Run PROCESS ────────────────────────────────────────────────
+      async function runProcess() {
+        const sid = document.getElementById("session-input").value.trim();
+        if (!sid) { setStatus("Please enter a Session ID.", "error"); return; }
+
+        const autoEval = document.getElementById("auto-eval-chk").checked;
+        const btn = document.getElementById("run-btn");
+        btn.disabled = true;
+
+        document.getElementById("status-bar").innerHTML =
+          `<span class="spinner"></span> Running PROCESS pipeline${autoEval ? " with LLM auto-evaluation" : ""}…`;
+
+        stageKeys.forEach(k => markTabLoading(k));
+
+        try {
+          const url = `${API_BASE}/process/run/${encodeURIComponent(sid)}?auto_evaluate=${autoEval}`;
+          const res = await fetch(url, { method: "POST" });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            setStatus(`Error: ${err.detail || res.statusText}`, "error");
+            resetTabs();
+            return;
+          }
+          const runData = await res.json();
+          setStatus(`✅ Report created — loading details…`, "success");
+
+          // Fetch the full report
+          await loadReportById(runData.report_id);
+          await fetchHistory(sid);
+
+        } catch (e) {
+          setStatus(`Network error: ${e.message}`, "error");
+          resetTabs();
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      // ── Load by report ID ──────────────────────────────────────────
+      async function loadReport() {
+        const val = document.getElementById("session-input").value.trim();
+        if (!val) { setStatus("Enter a report ID or session ID.", "error"); return; }
+
+        // Heuristic: if it looks like a UUID and exists as a report, treat as report ID
+        document.getElementById("load-btn").disabled = true;
+        setStatus("Loading report…", "");
+        try {
+          await loadReportById(val);
+          // Also try to load session history
+          const res2 = await fetch(`${API_BASE}/process/reports/${encodeURIComponent(val)}`);
+          if (res2.ok) {
+            const list = await res2.json();
+            if (list.length > 0) renderHistory(list, val);
+          }
+        } catch (e) {
+          setStatus(`Error: ${e.message}`, "error");
+        } finally {
+          document.getElementById("load-btn").disabled = false;
+        }
+      }
+
+      async function loadReportById(reportId) {
+        const res = await fetch(`${API_BASE}/process/report/${encodeURIComponent(reportId)}`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setStatus(`Error loading report: ${err.detail || res.statusText}`, "error");
+          return;
+        }
+        const data = await res.json();
+        renderReport(data);
+        setStatus(`✅ Loaded report ${reportId.slice(0, 8)}… (${fmtDate(data.created_at)})`, "success");
+      }
+
+      // ── Session history ────────────────────────────────────────────
+      async function fetchHistory(sessionId) {
+        try {
+          const res = await fetch(`${API_BASE}/process/reports/${encodeURIComponent(sessionId)}`);
+          if (!res.ok) return;
+          const list = await res.json();
+          if (list.length > 0) renderHistory(list, sessionId);
+        } catch (_) { /* optional */ }
+      }
+
+      function renderHistory(list, sessionId) {
+        const sec = document.getElementById("history-section");
+        sec.style.display = "block";
+        const ul = document.getElementById("history-list");
+        ul.innerHTML = "";
+        list.forEach(r => {
+          const li = document.createElement("li");
+          li.dataset.reportId = r.report_id;
+
+          const riskSpan = document.createElement("span");
+          riskSpan.className = `risk-pill ${riskClass(r.overall_risk_level)}`;
+          riskSpan.style.cssText = "font-size:0.75rem;padding:0.15rem 0.6rem";
+          riskSpan.textContent = r.overall_risk_level || "N/A";
+
+          const idSpan = document.createElement("span");
+          idSpan.style.cssText = "font-family:monospace;font-size:0.8rem";
+          idSpan.textContent = r.report_id.slice(0, 12) + "…";
+
+          const tsSpan = document.createElement("span");
+          tsSpan.className = "ts";
+          tsSpan.textContent = fmtDate(r.created_at);
+
+          li.appendChild(riskSpan);
+          li.appendChild(idSpan);
+          li.appendChild(tsSpan);
+          li.addEventListener("click", () => loadReportById(r.report_id));
+          ul.appendChild(li);
+        });
+      }
+
+      // ── Keyboard shortcut: Enter in session input ──────────────────
+      document.getElementById("session-input").addEventListener("keydown", e => {
+        if (e.key === "Enter") { e.preventDefault(); runProcess(); }
+      });
+
+      // Restore last-used session from localStorage
+      const saved = localStorage.getItem("process_session_id");
+      if (saved) document.getElementById("session-input").value = saved;
+
+      document.getElementById("session-input").addEventListener("input", e => {
+        localStorage.setItem("process_session_id", e.target.value);
+      });
+    </script>
+  </body>
+</html>
