@@ -6,39 +6,103 @@
     <title>PROCESS Workflow Dashboard</title>
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --bg:       #0f1117;
+        --surface:  #1a1d27;
+        --surface2: #22263a;
+        --border:   #2e3347;
+        --text:     #e2e8f0;
+        --muted:    #64748b;
+        --blue:     #3b82f6;
+        --blue-d:   #2563eb;
+        --blue-l:   #93c5fd;
+        --green:    #22c55e;
+        --red:      #ef4444;
+        --amber:    #f59e0b;
+        --radius:   12px;
+
+        /* Per-stage accent colours */
+        --c-P:  #8b5cf6;
+        --c-R:  #3b82f6;
+        --c-O:  #f59e0b;
+        --c-C:  #06b6d4;
+        --c-E:  #22c55e;
+        --c-S1: #6366f1;
+        --c-S2: #ec4899;
+      }
+
+      html { scroll-behavior: smooth; }
       body {
-        font-family: system-ui, sans-serif;
-        background: #f0f4f8;
-        color: #1a1a2e;
+        font-family: 'Inter', system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--text);
         min-height: 100vh;
       }
 
-      /* ── Top nav ── */
+      /* ── Header ── */
       header {
-        background: #1a1a2e;
-        color: #fff;
-        padding: 0.75rem 1.5rem;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 0 1.5rem;
+        height: 56px;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 1rem;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        backdrop-filter: blur(8px);
       }
-      header h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.03em; }
-      header nav a {
-        color: #93c5fd;
+      .header-left { display: flex; align-items: center; gap: 0.75rem; }
+      .header-logo {
+        width: 32px; height: 32px;
+        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+        flex-shrink: 0;
+      }
+      .header-title { font-weight: 700; font-size: 0.95rem; }
+      .header-sub { font-size: 0.72rem; color: var(--muted); }
+
+      .header-right { display: flex; align-items: center; gap: 0.75rem; }
+      #backend-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.25rem 0.65rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: rgba(59,130,246,0.15);
+        color: var(--blue-l);
+        border: 1px solid rgba(59,130,246,0.3);
+      }
+      #backend-badge.openai { background: rgba(34,197,94,0.15); color: #86efac; border-color: rgba(34,197,94,0.3); }
+
+      header a {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        color: var(--muted);
         text-decoration: none;
-        font-size: 0.9rem;
-        padding: 0.3rem 0.7rem;
-        border-radius: 4px;
-        transition: background 0.15s;
+        font-size: 0.82rem;
+        padding: 0.3rem 0.65rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        transition: color 0.15s, border-color 0.15s;
       }
-      header nav a:hover { background: rgba(255,255,255,0.1); }
+      header a:hover { color: var(--text); border-color: var(--blue); }
 
       /* ── Layout ── */
       main {
-        max-width: 1100px;
+        max-width: 1200px;
         margin: 0 auto;
-        padding: 1.5rem 1rem 3rem;
+        padding: 1.5rem 1.25rem 4rem;
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
@@ -46,704 +110,1030 @@
 
       /* ── Control panel ── */
       .control-panel {
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
         padding: 1.25rem 1.5rem;
         display: flex;
         flex-wrap: wrap;
-        gap: 0.8rem;
+        gap: 1rem;
         align-items: flex-end;
       }
-      .field { display: flex; flex-direction: column; gap: 0.3rem; }
-      .field label { font-size: 0.82rem; font-weight: 600; color: #475569; }
-      .field input, .field select {
-        padding: 0.5rem 0.75rem;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
+      .field { display: flex; flex-direction: column; gap: 0.3rem; flex: 1; min-width: 200px; }
+      .field label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
         font-size: 0.9rem;
-        min-width: 220px;
-        background: #f8fafc;
+        padding: 0.6rem 0.85rem;
+        font-family: inherit;
+        outline: none;
+        transition: border-color 0.15s;
       }
-      .field input:focus, .field select:focus {
-        outline: 2px solid #3b82f6;
-        outline-offset: 1px;
-      }
+      .field input:focus { border-color: var(--blue); }
+      .field input::placeholder { color: var(--muted); }
+
       .toggle-row {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        font-size: 0.88rem;
-        color: #334155;
-        padding-bottom: 0.15rem;
+        font-size: 0.85rem;
+        color: var(--text);
+        padding-bottom: 0.6rem;
       }
-      .toggle-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
-      button.run-btn {
-        padding: 0.55rem 1.4rem;
-        background: #2563eb;
-        color: #fff;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 0.95rem;
-        font-weight: 600;
-        white-space: nowrap;
-        align-self: flex-end;
-        transition: background 0.15s;
-      }
-      button.run-btn:hover { background: #1d4ed8; }
-      button.run-btn:disabled { background: #93c5fd; cursor: not-allowed; }
+      .toggle-row input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--blue); cursor: pointer; }
 
-      /* ── Backend info ── */
-      #backend-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-        padding: 0.3rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
+      .btn-group { display: flex; gap: 0.5rem; }
+      .run-btn {
+        padding: 0.6rem 1.25rem;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.88rem;
         font-weight: 600;
-        background: #dbeafe;
-        color: #1e40af;
-        border: 1px solid #bfdbfe;
+        transition: opacity 0.15s, transform 0.1s;
+        white-space: nowrap;
       }
-      #backend-badge.openai { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+      .run-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+      .run-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+      .run-btn.primary { background: linear-gradient(135deg, var(--blue-d), #7c3aed); color: #fff; }
+      .run-btn.secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
 
       /* ── Status bar ── */
       #status-bar {
         font-size: 0.85rem;
-        color: #64748b;
+        color: var(--muted);
         min-height: 1.2rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
         padding: 0 0.25rem;
       }
-      #status-bar.error { color: #dc2626; }
-      #status-bar.success { color: #16a34a; }
+      #status-bar.error   { color: var(--red); }
+      #status-bar.success { color: var(--green); }
 
       /* ── Summary card ── */
       .summary-card {
-        background: #1a1a2e;
-        color: #fff;
-        border-radius: 10px;
-        padding: 1.25rem 1.5rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        display: none;
+        flex-direction: column;
+        gap: 1.25rem;
+      }
+      .summary-card.show { display: flex; }
+      .summary-top {
         display: flex;
-        flex-wrap: wrap;
-        gap: 1.5rem;
         align-items: center;
+        gap: 0.75rem;
       }
-      .summary-card h2 { font-size: 1rem; opacity: 0.8; flex-basis: 100%; }
-      .summary-stat { text-align: center; }
-      .summary-stat .val {
-        font-size: 2rem;
-        font-weight: 700;
-        line-height: 1;
-      }
-      .summary-stat .lbl { font-size: 0.75rem; opacity: 0.7; margin-top: 0.2rem; }
+      .summary-top h2 { font-size: 1rem; font-weight: 700; flex: 1; }
       .risk-pill {
-        display: inline-block;
-        padding: 0.3rem 1rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.3rem 0.9rem;
         border-radius: 20px;
         font-weight: 700;
-        font-size: 1rem;
-        letter-spacing: 0.05em;
+        font-size: 0.85rem;
+        letter-spacing: 0.04em;
       }
-      .risk-HIGH  { background: #fee2e2; color: #991b1b; }
-      .risk-MEDIUM{ background: #fef9c3; color: #92400e; }
-      .risk-LOW   { background: #dcfce7; color: #166534; }
-      .risk-NA    { background: #f1f5f9; color: #475569; }
+      .risk-HIGH   { background: rgba(239,68,68,0.15);   color: #fca5a5; border: 1px solid rgba(239,68,68,0.35); }
+      .risk-MEDIUM { background: rgba(245,158,11,0.15);  color: #fcd34d; border: 1px solid rgba(245,158,11,0.35); }
+      .risk-LOW    { background: rgba(34,197,94,0.15);   color: #86efac; border: 1px solid rgba(34,197,94,0.35); }
+      .risk-NA     { background: rgba(100,116,139,0.15); color: var(--muted); border: 1px solid var(--border); }
 
-      /* ── PROCESS pipeline ── */
+      .summary-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 0.75rem;
+      }
+      .sum-stat {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0.85rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+      .sum-stat .ss-icon { font-size: 1.2rem; }
+      .sum-stat .ss-val { font-size: 1.6rem; font-weight: 700; line-height: 1; color: var(--blue-l); }
+      .sum-stat .ss-lbl { font-size: 0.72rem; color: var(--muted); }
+
+      /* Progress bars */
+      .progress-wrap { display: flex; flex-direction: column; gap: 0.3rem; }
+      .progress-label { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); }
+      .progress-bar-bg {
+        height: 6px;
+        background: var(--surface2);
+        border-radius: 3px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+      }
+      .progress-bar-fill {
+        height: 100%;
+        border-radius: 3px;
+        background: linear-gradient(90deg, var(--blue-d), #8b5cf6);
+        transition: width 0.6s ease;
+      }
+      .progress-bar-fill.green { background: linear-gradient(90deg, #16a34a, #22c55e); }
+      .progress-bar-fill.amber { background: linear-gradient(90deg, #d97706, #f59e0b); }
+      .progress-bar-fill.red   { background: linear-gradient(90deg, #b91c1c, #ef4444); }
+
+      /* ── Pipeline track ── */
+      .pipeline-wrap { display: flex; flex-direction: column; gap: 0.75rem; }
+      .pipeline-label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        padding: 0 0.25rem;
+      }
       .pipeline-track {
         display: flex;
-        flex-wrap: wrap;
-        gap: 0;
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
+        align-items: stretch;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
         overflow: hidden;
       }
       .stage-tab {
-        flex: 1 1 0;
-        min-width: 120px;
-        padding: 0.75rem 0.5rem;
+        flex: 1;
+        min-width: 80px;
+        padding: 0.9rem 0.5rem 0.75rem;
         text-align: center;
-        border-right: 1px solid #e2e8f0;
         cursor: pointer;
         transition: background 0.15s;
         position: relative;
+        border-right: 1px solid var(--border);
       }
       .stage-tab:last-child { border-right: none; }
-      .stage-tab:hover { background: #f1f5f9; }
-      .stage-tab.active { background: #eff6ff; border-bottom: 3px solid #2563eb; }
-      .stage-tab.done  { background: #f0fdf4; }
-      .stage-tab.error-state { background: #fff1f2; }
-      .stage-letter {
-        font-size: 1.5rem;
-        font-weight: 800;
-        color: #2563eb;
-        line-height: 1;
+      .stage-tab:hover { background: var(--surface2); }
+
+      .stage-tab::after {
+        content: "";
+        display: block;
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 3px;
+        background: transparent;
+        transition: background 0.2s;
       }
-      .stage-tab.done   .stage-letter { color: #16a34a; }
-      .stage-tab.error-state .stage-letter { color: #dc2626; }
-      .stage-name { font-size: 0.7rem; color: #64748b; margin-top: 0.2rem; }
+      .stage-tab[data-key="P"]  { --accent: var(--c-P); }
+      .stage-tab[data-key="R"]  { --accent: var(--c-R); }
+      .stage-tab[data-key="O"]  { --accent: var(--c-O); }
+      .stage-tab[data-key="C"]  { --accent: var(--c-C); }
+      .stage-tab[data-key="E"]  { --accent: var(--c-E); }
+      .stage-tab[data-key="S1"] { --accent: var(--c-S1); }
+      .stage-tab[data-key="S2"] { --accent: var(--c-S2); }
+
+      .stage-tab.done::after  { background: var(--accent); }
+      .stage-tab.loading::after { background: var(--amber); }
+
       .stage-badge {
         position: absolute;
         top: 6px; right: 6px;
-        width: 10px; height: 10px;
+        width: 8px; height: 8px;
         border-radius: 50%;
-        background: #d1d5db;
+        background: var(--border);
       }
-      .stage-tab.done   .stage-badge { background: #22c55e; }
-      .stage-tab.error-state .stage-badge { background: #ef4444; }
-      .stage-tab.loading .stage-badge { background: #f59e0b; animation: pulse 1s infinite; }
+      .stage-tab.done    .stage-badge { background: var(--green); box-shadow: 0 0 5px var(--green); }
+      .stage-tab.loading .stage-badge { background: var(--amber); animation: pulse-badge 1s infinite; }
+      @keyframes pulse-badge { 0%,100%{opacity:1} 50%{opacity:.25} }
 
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.3; }
+      .stage-letter {
+        font-size: 1.6rem;
+        font-weight: 800;
+        line-height: 1;
+        color: var(--muted);
+        transition: color 0.2s;
       }
+      .stage-tab.done    .stage-letter { color: var(--accent); }
+      .stage-tab.loading .stage-letter { color: var(--amber); }
 
-      /* ── Stage detail panels ── */
+      .stage-name {
+        font-size: 0.66rem;
+        color: var(--muted);
+        margin-top: 0.2rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        transition: color 0.2s;
+      }
+      .stage-tab.done .stage-name { color: var(--text); }
+
+      /* ── Stage panels ── */
       .stage-panels { display: flex; flex-direction: column; gap: 1rem; }
+
       .stage-panel {
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
         overflow: hidden;
         display: none;
+        animation: panelIn 0.3s ease;
       }
+      @keyframes panelIn { from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
       .stage-panel.visible { display: block; }
+
       .stage-panel-header {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        padding: 0.9rem 1.25rem;
-        background: #f8fafc;
-        border-bottom: 1px solid #e2e8f0;
+        gap: 0.85rem;
+        padding: 0.95rem 1.25rem;
         cursor: pointer;
         user-select: none;
+        border-bottom: 1px solid transparent;
+        transition: background 0.12s;
       }
-      .stage-panel-letter {
-        font-size: 1.6rem;
+      .stage-panel-header:hover { background: var(--surface2); }
+      .stage-panel.visible:not(.collapsed) .stage-panel-header {
+        border-bottom-color: var(--border);
+      }
+
+      .panel-letter-badge {
+        width: 40px; height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.3rem;
         font-weight: 800;
-        color: #2563eb;
-        width: 36px;
-        text-align: center;
+        flex-shrink: 0;
       }
-      .stage-panel-title { flex: 1; font-weight: 600; font-size: 0.95rem; }
-      .stage-panel-risk { }
-      .chevron { color: #94a3b8; font-size: 1rem; transition: transform 0.2s; }
+      .stage-panel[data-key="P"]  .panel-letter-badge { background: rgba(139,92,246,0.15); color: var(--c-P); border: 1px solid rgba(139,92,246,0.3); }
+      .stage-panel[data-key="R"]  .panel-letter-badge { background: rgba(59,130,246,0.15);  color: var(--c-R); border: 1px solid rgba(59,130,246,0.3); }
+      .stage-panel[data-key="O"]  .panel-letter-badge { background: rgba(245,158,11,0.15);  color: var(--c-O); border: 1px solid rgba(245,158,11,0.3); }
+      .stage-panel[data-key="C"]  .panel-letter-badge { background: rgba(6,182,212,0.15);   color: var(--c-C); border: 1px solid rgba(6,182,212,0.3); }
+      .stage-panel[data-key="E"]  .panel-letter-badge { background: rgba(34,197,94,0.15);   color: var(--c-E); border: 1px solid rgba(34,197,94,0.3); }
+      .stage-panel[data-key="S1"] .panel-letter-badge { background: rgba(99,102,241,0.15);  color: var(--c-S1); border: 1px solid rgba(99,102,241,0.3); }
+      .stage-panel[data-key="S2"] .panel-letter-badge { background: rgba(236,72,153,0.15);  color: var(--c-S2); border: 1px solid rgba(236,72,153,0.3); }
+
+      .panel-title-group { flex: 1; }
+      .panel-title-group .pt { font-weight: 700; font-size: 0.95rem; }
+      .panel-title-group .ps { font-size: 0.75rem; color: var(--muted); margin-top: 0.1rem; }
+      .chevron { color: var(--muted); font-size: 0.9rem; transition: transform 0.2s; }
       .stage-panel.collapsed .chevron { transform: rotate(-90deg); }
-      .stage-panel-body { padding: 1.25rem; }
+
+      /* Stage left accent border */
+      .stage-panel[data-key="P"]  { border-left: 3px solid var(--c-P); }
+      .stage-panel[data-key="R"]  { border-left: 3px solid var(--c-R); }
+      .stage-panel[data-key="O"]  { border-left: 3px solid var(--c-O); }
+      .stage-panel[data-key="C"]  { border-left: 3px solid var(--c-C); }
+      .stage-panel[data-key="E"]  { border-left: 3px solid var(--c-E); }
+      .stage-panel[data-key="S1"] { border-left: 3px solid var(--c-S1); }
+      .stage-panel[data-key="S2"] { border-left: 3px solid var(--c-S2); }
+
+      .stage-panel-body { padding: 1.25rem 1.5rem; }
       .stage-panel.collapsed .stage-panel-body { display: none; }
 
       .summary-text {
-        background: #f8fafc;
-        border-left: 3px solid #3b82f6;
-        padding: 0.6rem 0.9rem;
+        background: var(--surface2);
+        border-left: 3px solid var(--blue);
+        padding: 0.7rem 1rem;
         font-size: 0.88rem;
-        color: #334155;
-        border-radius: 0 4px 4px 0;
-        margin-bottom: 1rem;
+        color: var(--text);
+        border-radius: 0 6px 6px 0;
+        margin-bottom: 1.25rem;
+        line-height: 1.6;
       }
+
       .section-label {
-        font-size: 0.78rem;
+        font-size: 0.72rem;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: #64748b;
-        margin-bottom: 0.4rem;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 0.5rem;
       }
-      .actions-list {
-        list-style: none;
-        display: flex;
-        flex-direction: column;
-        gap: 0.4rem;
-      }
+
+      .actions-list { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
       .actions-list li {
         display: flex;
-        gap: 0.5rem;
+        gap: 0.6rem;
         align-items: flex-start;
-        font-size: 0.88rem;
+        font-size: 0.86rem;
+        padding: 0.45rem 0.65rem;
+        background: var(--surface2);
+        border-radius: 6px;
+        border: 1px solid var(--border);
       }
       .actions-list li::before {
-        content: "→";
-        color: #f59e0b;
+        content: "\2192";
+        color: var(--amber);
         font-weight: 700;
         flex-shrink: 0;
-        margin-top: 0.05rem;
       }
+
       .data-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
         gap: 0.6rem;
-        margin-top: 0.6rem;
+        margin-top: 0.5rem;
       }
       .data-cell {
-        background: #f1f5f9;
-        border-radius: 6px;
-        padding: 0.5rem 0.75rem;
-        font-size: 0.83rem;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.6rem 0.85rem;
+        font-size: 0.82rem;
       }
-      .data-cell strong { display: block; font-size: 0.72rem; color: #64748b; margin-bottom: 0.15rem; }
-      details.raw-data { margin-top: 0.75rem; }
+      .data-cell strong {
+        display: block;
+        font-size: 0.7rem;
+        color: var(--muted);
+        margin-bottom: 0.2rem;
+        text-transform: capitalize;
+      }
+      .data-cell .dv { color: var(--blue-l); font-weight: 600; }
+
+      details.raw-data { margin-top: 0.85rem; }
       details.raw-data summary {
         cursor: pointer;
-        font-size: 0.78rem;
-        color: #6366f1;
+        font-size: 0.75rem;
+        color: #818cf8;
         font-weight: 600;
+        user-select: none;
+        padding: 0.3rem 0.5rem;
+        border-radius: 4px;
+        background: rgba(129,140,248,0.08);
+        display: inline-block;
       }
       details.raw-data pre {
-        margin-top: 0.4rem;
-        background: #1e293b;
+        margin-top: 0.5rem;
+        background: #0d1117;
         color: #e2e8f0;
-        border-radius: 6px;
-        padding: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.85rem;
         font-size: 0.75rem;
         overflow-x: auto;
-        max-height: 300px;
+        max-height: 320px;
         overflow-y: auto;
+        line-height: 1.5;
       }
 
-      /* ── History list ── */
-      .history-section { }
-      .history-section h3 { font-size: 0.9rem; font-weight: 700; color: #475569; margin-bottom: 0.5rem; }
-      .history-list {
-        list-style: none;
-        display: flex;
-        flex-direction: column;
-        gap: 0.3rem;
+      /* ── History ── */
+      .history-section {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.25rem 1.5rem;
+        display: none;
       }
+      .history-section.show { display: block; }
+      .history-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.85rem; }
+      .history-header h3 { font-size: 0.92rem; font-weight: 700; flex: 1; }
+      .history-list { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
       .history-list li {
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 6px;
-        padding: 0.55rem 0.9rem;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.65rem 1rem;
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        font-size: 0.85rem;
+        gap: 0.85rem;
         cursor: pointer;
-        transition: background 0.12s;
+        transition: background 0.12s, border-color 0.12s;
       }
-      .history-list li:hover { background: #eff6ff; }
-      .history-list .ts { color: #94a3b8; font-size: 0.78rem; flex: 1; }
+      .history-list li:hover { background: rgba(59,130,246,0.08); border-color: rgba(59,130,246,0.3); }
+      .history-list li .hl-id { font-family: monospace; font-size: 0.8rem; color: var(--blue-l); flex: 1; }
+      .history-list li .hl-ts { font-size: 0.75rem; color: var(--muted); }
+      .history-list li .hl-ago { font-size: 0.72rem; color: var(--muted); }
 
-      /* ── Loader ── */
+      /* ── Spinner ── */
       .spinner {
         display: inline-block;
         width: 14px; height: 14px;
-        border: 2px solid #bfdbfe;
-        border-top-color: #2563eb;
+        border: 2px solid rgba(59,130,246,0.25);
+        border-top-color: var(--blue);
         border-radius: 50%;
         animation: spin 0.6s linear infinite;
         vertical-align: middle;
-        margin-right: 0.3rem;
       }
       @keyframes spin { to { transform: rotate(360deg); } }
 
       /* ── Empty state ── */
       .empty {
         text-align: center;
-        padding: 3rem 1rem;
-        color: #94a3b8;
-        font-size: 0.95rem;
+        padding: 3.5rem 1rem;
+        color: var(--muted);
       }
-      .empty .icon { font-size: 3rem; margin-bottom: 0.5rem; }
+      .empty .e-icon { font-size: 2.8rem; margin-bottom: 0.75rem; }
+      .empty h3 { font-size: 1rem; color: var(--text); margin-bottom: 0.5rem; }
+      .empty p  { font-size: 0.85rem; max-width: 400px; margin: 0 auto; line-height: 1.6; }
+      .empty .steps {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin: 1rem auto 0;
+        max-width: 340px;
+        text-align: left;
+      }
+      .empty .step {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.65rem;
+        font-size: 0.83rem;
+        padding: 0.5rem 0.75rem;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+      }
+      .empty .step-num {
+        width: 20px; height: 20px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 700;
+        flex-shrink: 0;
+        color: var(--blue-l);
+      }
+
+      /* ── Toast ── */
+      #toast {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0.7rem 1.1rem;
+        font-size: 0.83rem;
+        color: var(--text);
+        opacity: 0;
+        transform: translateY(12px);
+        transition: opacity 0.25s, transform 0.25s;
+        pointer-events: none;
+        z-index: 300;
+        max-width: 380px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      }
+      #toast.show  { opacity: 1; transform: none; }
+      #toast.success { border-left: 3px solid var(--green); }
+      #toast.error   { border-left: 3px solid var(--red);   }
+      #toast.info    { border-left: 3px solid var(--blue);  }
     </style>
   </head>
   <body>
+
     <header>
-      <h1>⚙️ PROCESS Workflow Dashboard</h1>
-      <nav>
-        <span id="backend-badge">🖥️ Ollama</span>
-        &nbsp;
-        <a href="chat_ui.html">💬 Chat</a>
-      </nav>
+      <div class="header-left">
+        <div class="header-logo">&#9881;&#65039;</div>
+        <div>
+          <div class="header-title">PROCESS Workflow Dashboard</div>
+          <div class="header-sub">AI Quality Audit Pipeline</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <span id="backend-badge">&#128187; Ollama</span>
+        <a href="chat_ui.html">&#128172; Chat</a>
+      </div>
     </header>
 
     <main>
-      <!-- ── Control panel ── -->
+      <!-- Control panel -->
       <div class="control-panel">
         <div class="field">
-          <label for="session-input">Session ID</label>
-          <input id="session-input" type="text" placeholder="Paste session UUID…" autocomplete="off" />
+          <label>Session ID</label>
+          <input id="session-input" type="text" placeholder="Paste session UUID&#8230;" autocomplete="off" spellcheck="false" />
         </div>
-        <div class="field">
-          <label>&nbsp;</label>
+        <div style="display:flex;flex-direction:column;gap:0.5rem;padding-bottom:0.1rem">
           <div class="toggle-row">
             <input type="checkbox" id="auto-eval-chk" />
-            <label for="auto-eval-chk">LLM Auto-Evaluate (Poe / Ollama)</label>
+            <label for="auto-eval-chk" style="font-size:0.85rem">LLM Auto-Evaluate (Poe / Ollama)</label>
+          </div>
+          <div class="btn-group">
+            <button class="run-btn primary" id="run-btn" aria-label="Run PROCESS pipeline" onclick="runProcess()">&#9654; Run PROCESS</button>
+            <button class="run-btn secondary" id="load-btn" aria-label="Load existing report" onclick="loadReport()">&#128203; Load Report</button>
           </div>
         </div>
-        <button class="run-btn" id="run-btn" onclick="runProcess()">▶ Run PROCESS</button>
-        <button class="run-btn" id="load-btn" style="background:#475569" onclick="loadReport()">📋 Load Report</button>
       </div>
 
       <div id="status-bar"></div>
 
-      <!-- ── PROCESS pipeline tabs ── -->
-      <div class="pipeline-track" id="pipeline-track">
-        <div class="stage-tab" id="tab-P" onclick="scrollToStage('P')">
-          <div class="stage-badge"></div>
-          <div class="stage-letter">P</div>
-          <div class="stage-name">Purpose</div>
-        </div>
-        <div class="stage-tab" id="tab-R" onclick="scrollToStage('R')">
-          <div class="stage-badge"></div>
-          <div class="stage-letter">R</div>
-          <div class="stage-name">Resources</div>
-        </div>
-        <div class="stage-tab" id="tab-O" onclick="scrollToStage('O')">
-          <div class="stage-badge"></div>
-          <div class="stage-letter">O</div>
-          <div class="stage-name">Optimization</div>
-        </div>
-        <div class="stage-tab" id="tab-C" onclick="scrollToStage('C')">
-          <div class="stage-badge"></div>
-          <div class="stage-letter">C</div>
-          <div class="stage-name">Count</div>
-        </div>
-        <div class="stage-tab" id="tab-E" onclick="scrollToStage('E')">
-          <div class="stage-badge"></div>
-          <div class="stage-letter">E</div>
-          <div class="stage-name">Effectiveness</div>
-        </div>
-        <div class="stage-tab" id="tab-S1" onclick="scrollToStage('S1')">
-          <div class="stage-badge"></div>
-          <div class="stage-letter">S</div>
-          <div class="stage-name">Standards</div>
-        </div>
-        <div class="stage-tab" id="tab-S2" onclick="scrollToStage('S2')">
-          <div class="stage-badge"></div>
-          <div class="stage-letter">S</div>
-          <div class="stage-name">Scrutiny</div>
+      <!-- Pipeline track -->
+      <div class="pipeline-wrap">
+        <div class="pipeline-label">P &#8594; R &#8594; O &#8594; C &#8594; E &#8594; S &#8594; S &nbsp; Pipeline</div>
+        <div class="pipeline-track" id="pipeline-track">
+          <div class="stage-tab" id="tab-P" data-key="P" role="button" aria-label="Go to Purpose stage" onclick="scrollToStage('P')">
+            <div class="stage-badge" aria-hidden="true"></div>
+            <div class="stage-letter" aria-hidden="true">P</div>
+            <div class="stage-name">Purpose</div>
+          </div>
+          <div class="stage-tab" id="tab-R" data-key="R" role="button" aria-label="Go to Resources stage" onclick="scrollToStage('R')">
+            <div class="stage-badge" aria-hidden="true"></div>
+            <div class="stage-letter" aria-hidden="true">R</div>
+            <div class="stage-name">Resources</div>
+          </div>
+          <div class="stage-tab" id="tab-O" data-key="O" role="button" aria-label="Go to Optimization stage" onclick="scrollToStage('O')">
+            <div class="stage-badge" aria-hidden="true"></div>
+            <div class="stage-letter" aria-hidden="true">O</div>
+            <div class="stage-name">Optimization</div>
+          </div>
+          <div class="stage-tab" id="tab-C" data-key="C" role="button" aria-label="Go to Count stage" onclick="scrollToStage('C')">
+            <div class="stage-badge" aria-hidden="true"></div>
+            <div class="stage-letter" aria-hidden="true">C</div>
+            <div class="stage-name">Count</div>
+          </div>
+          <div class="stage-tab" id="tab-E" data-key="E" role="button" aria-label="Go to Effectiveness stage" onclick="scrollToStage('E')">
+            <div class="stage-badge" aria-hidden="true"></div>
+            <div class="stage-letter" aria-hidden="true">E</div>
+            <div class="stage-name">Effectiveness</div>
+          </div>
+          <div class="stage-tab" id="tab-S1" data-key="S1" role="button" aria-label="Go to Standards stage" onclick="scrollToStage('S1')">
+            <div class="stage-badge" aria-hidden="true"></div>
+            <div class="stage-letter" aria-hidden="true">S</div>
+            <div class="stage-name">Standards</div>
+          </div>
+          <div class="stage-tab" id="tab-S2" data-key="S2" role="button" aria-label="Go to Scrutiny stage" onclick="scrollToStage('S2')">
+            <div class="stage-badge" aria-hidden="true"></div>
+            <div class="stage-letter" aria-hidden="true">S</div>
+            <div class="stage-name">Scrutiny</div>
+          </div>
         </div>
       </div>
 
-      <!-- ── Overall summary ── -->
-      <div id="summary-card" style="display:none" class="summary-card">
-        <h2>Overall Audit Summary</h2>
-        <div class="summary-stat">
-          <div class="val" id="sum-cases">—</div>
-          <div class="lbl">Cases Evaluated</div>
-        </div>
-        <div class="summary-stat">
-          <div class="val" id="sum-bad">—</div>
-          <div class="lbl">Bad Cases</div>
-        </div>
-        <div class="summary-stat">
-          <div class="val" id="sum-score">—</div>
-          <div class="lbl">Avg Score / 5</div>
-        </div>
-        <div class="summary-stat">
-          <div class="val" id="sum-pass">—</div>
-          <div class="lbl">Pass Rate</div>
-        </div>
-        <div class="summary-stat">
-          <div class="lbl" style="margin-bottom:0.3rem">Risk Level</div>
+      <!-- Summary card -->
+      <div id="summary-card" class="summary-card">
+        <div class="summary-top">
+          <h2>&#128202; Overall Audit Summary</h2>
           <span class="risk-pill risk-NA" id="sum-risk">N/A</span>
         </div>
+        <div class="summary-stats">
+          <div class="sum-stat">
+            <div class="ss-icon">&#128203;</div>
+            <div class="ss-val" id="sum-cases">&#8212;</div>
+            <div class="ss-lbl">Cases Evaluated</div>
+          </div>
+          <div class="sum-stat">
+            <div class="ss-icon">&#128680;</div>
+            <div class="ss-val" id="sum-bad">&#8212;</div>
+            <div class="ss-lbl">Bad Cases</div>
+          </div>
+          <div class="sum-stat">
+            <div class="ss-icon">&#11088;</div>
+            <div class="ss-val" id="sum-score">&#8212;</div>
+            <div class="ss-lbl">Avg Score / 5</div>
+          </div>
+          <div class="sum-stat">
+            <div class="ss-icon">&#9989;</div>
+            <div class="ss-val" id="sum-pass">&#8212;</div>
+            <div class="ss-lbl">Pass Rate</div>
+          </div>
+        </div>
+        <div>
+          <div class="section-label">Pass Rate</div>
+          <div class="progress-wrap" style="margin-top:0.3rem">
+            <div class="progress-label">
+              <span>0%</span>
+              <span id="prog-pass-label">&#8212;</span>
+              <span>100%</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill green" id="prog-pass" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="section-label">Avg Score (out of 5)</div>
+          <div class="progress-wrap" style="margin-top:0.3rem">
+            <div class="progress-label">
+              <span>0</span>
+              <span id="prog-score-label">&#8212;</span>
+              <span>5</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" id="prog-score" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+        <div id="sum-created" style="font-size:0.75rem;color:var(--muted)"></div>
       </div>
 
-      <!-- ── Stage detail panels ── -->
+      <!-- Stage panels -->
       <div class="stage-panels" id="stage-panels">
         <div class="empty" id="empty-state">
-          <div class="icon">📊</div>
-          Enter a session ID and click <strong>Run PROCESS</strong> to analyze a conversation,<br>
-          or paste a report ID and click <strong>Load Report</strong> to view a saved report.
+          <div class="e-icon">&#128202;</div>
+          <h3>No report loaded yet</h3>
+          <p>Run the PROCESS pipeline on a chat session to get a detailed quality analysis across all 7 stages.</p>
+          <div class="steps">
+            <div class="step"><div class="step-num">1</div>Paste a <strong>Session ID</strong> from the Chat UI</div>
+            <div class="step"><div class="step-num">2</div>Optionally enable <strong>LLM Auto-Evaluate</strong> for AI-powered scoring</div>
+            <div class="step"><div class="step-num">3</div>Click <strong>&#9654; Run PROCESS</strong> to start the pipeline</div>
+            <div class="step"><div class="step-num">4</div>Review results across all 7 stages below</div>
+          </div>
         </div>
       </div>
 
-      <!-- ── Report history ── -->
-      <div class="history-section" id="history-section" style="display:none">
-        <h3>📁 Previous Reports for This Session</h3>
+      <!-- History -->
+      <div class="history-section" id="history-section">
+        <div class="history-header">
+          <h3>&#128193; Previous Reports for This Session</h3>
+        </div>
         <ul class="history-list" id="history-list"></ul>
       </div>
     </main>
 
+    <div id="toast"></div>
+
     <script>
       const API_BASE = "http://localhost:8000";
 
-      // ── Backend probe ──────────────────────────────────────────────
+      let toastTimer = null;
+      function showToast(msg, type = "info", dur = 3000) {
+        const t = document.getElementById("toast");
+        t.textContent = msg;
+        t.className = "show " + type;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { t.className = ""; }, dur);
+      }
+
+      // Backend probe
       (async () => {
         try {
-          const r = await fetch(`${API_BASE}/health`);
+          const r = await fetch(API_BASE + "/health");
           if (r.ok) {
             const d = await r.json();
             const badge = document.getElementById("backend-badge");
             if (d.llm_backend === "openai") {
-              badge.textContent = "☁️ OpenAI / Poe";
+              badge.textContent = "\u2601\uFE0F OpenAI / Poe";
               badge.classList.add("openai");
             } else {
-              badge.textContent = "🖥️ Ollama (local)";
+              badge.textContent = "\uD83D\uDCBB Ollama (local)";
             }
           }
-        } catch (_) { /* server offline */ }
+        } catch (_) {}
       })();
 
-      // ── Helpers ────────────────────────────────────────────────────
       function setStatus(msg, type = "") {
         const el = document.getElementById("status-bar");
-        el.textContent = msg;
+        el.innerHTML = msg;
         el.className = type;
       }
 
       function riskClass(level) {
         if (!level || level === "N/A") return "risk-NA";
-        return `risk-${level}`;
+        return "risk-" + level;
       }
 
       function fmtDate(iso) {
-        if (!iso) return "—";
+        if (!iso) return "\u2014";
         try { return new Date(iso).toLocaleString(); } catch { return iso; }
       }
+      function relTime(iso) {
+        if (!iso) return "";
+        const diff = Date.now() - new Date(iso).getTime();
+        const m = Math.floor(diff / 60000);
+        if (m < 1) return "just now";
+        if (m < 60) return m + "m ago";
+        const h = Math.floor(m / 60);
+        if (h < 24) return h + "h ago";
+        return Math.floor(h / 24) + "d ago";
+      }
 
-      // ── Tab helpers ────────────────────────────────────────────────
       const stageKeys = ["P", "R", "O", "C", "E", "S1", "S2"];
 
       function resetTabs() {
         stageKeys.forEach(k => {
-          const t = document.getElementById(`tab-${k}`);
-          if (t) { t.className = "stage-tab"; }
+          const t = document.getElementById("tab-" + k);
+          if (t) t.className = "stage-tab";
         });
       }
-
       function markTabDone(key) {
-        const t = document.getElementById(`tab-${key}`);
-        if (t) t.classList.add("done");
+        const t = document.getElementById("tab-" + key);
+        if (t) { t.className = "stage-tab done"; }
       }
-
       function markTabLoading(key) {
-        const t = document.getElementById(`tab-${key}`);
-        if (t) t.classList.add("loading");
+        const t = document.getElementById("tab-" + key);
+        if (t) { t.className = "stage-tab loading"; }
       }
-
       function scrollToStage(key) {
-        const el = document.getElementById(`panel-${key}`);
+        const el = document.getElementById("panel-" + key);
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
       }
 
-      // ── Build stage panel HTML ─────────────────────────────────────
-      function buildPanel(key, letter, title, sectionData) {
-        const risk = sectionData?.risk_level || "N/A";
+      function buildPanel(key, letter, title, subtitle, sectionData) {
+        const risk    = sectionData?.risk_level || "N/A";
         const summary = sectionData?.summary || "";
         const actions = sectionData?.improvement_actions || [];
-        const data = sectionData?.data || {};
+        const data    = sectionData?.data || {};
 
-        const dataItems = Object.entries(data)
-          .filter(([k, v]) => typeof v !== "object" && v !== null)
-          .map(([k, v]) => `
-            <div class="data-cell">
-              <strong>${k.replace(/_/g, " ")}</strong>
-              ${v ?? "—"}
-            </div>`).join("");
+        const div = document.createElement("div");
+        div.className = "stage-panel visible";
+        div.id = "panel-" + key;
+        div.dataset.key = key;
 
-        const actionItems = actions.map(a => `<li>${a}</li>`).join("");
+        // Header
+        const hdr = document.createElement("div");
+        hdr.className = "stage-panel-header";
+        hdr.onclick = () => togglePanel(key);
 
-        return `
-        <div class="stage-panel visible" id="panel-${key}">
-          <div class="stage-panel-header" onclick="togglePanel('${key}')">
-            <span class="stage-panel-letter">${letter}</span>
-            <span class="stage-panel-title">${title}</span>
-            <span class="risk-pill ${riskClass(risk)}" style="font-size:0.78rem;padding:0.2rem 0.7rem">${risk}</span>
-            <span class="chevron">▾</span>
-          </div>
-          <div class="stage-panel-body">
-            ${summary ? `<div class="summary-text">${summary}</div>` : ""}
-            ${dataItems ? `
-              <div class="section-label">Key Metrics</div>
-              <div class="data-grid">${dataItems}</div>
-            ` : ""}
-            ${actionItems ? `
-              <div class="section-label" style="margin-top:1rem">Improvement Actions</div>
-              <ul class="actions-list">${actionItems}</ul>
-            ` : ""}
-            <details class="raw-data">
-              <summary>Raw data</summary>
-              <pre>${JSON.stringify(data, null, 2)}</pre>
-            </details>
-          </div>
-        </div>`;
+        const badge = document.createElement("div");
+        badge.className = "panel-letter-badge";
+        badge.textContent = letter;
+
+        const titleGroup = document.createElement("div");
+        titleGroup.className = "panel-title-group";
+        const pt = document.createElement("div");
+        pt.className = "pt";
+        pt.textContent = title;
+        const ps = document.createElement("div");
+        ps.className = "ps";
+        ps.textContent = subtitle;
+        titleGroup.appendChild(pt);
+        titleGroup.appendChild(ps);
+
+        const riskPill = document.createElement("span");
+        riskPill.className = "risk-pill " + riskClass(risk);
+        riskPill.style.cssText = "font-size:0.75rem;padding:0.2rem 0.7rem";
+        riskPill.textContent = risk;
+
+        const chevron = document.createElement("span");
+        chevron.className = "chevron";
+        chevron.textContent = "\u25BE";
+
+        hdr.appendChild(badge);
+        hdr.appendChild(titleGroup);
+        hdr.appendChild(riskPill);
+        hdr.appendChild(chevron);
+        div.appendChild(hdr);
+
+        // Body
+        const body = document.createElement("div");
+        body.className = "stage-panel-body";
+
+        if (summary) {
+          const st = document.createElement("div");
+          st.className = "summary-text";
+          st.textContent = summary;
+          body.appendChild(st);
+        }
+
+        // Key metrics
+        const dataEntries = Object.entries(data).filter(([k, v]) => typeof v !== "object" && v !== null);
+        if (dataEntries.length > 0) {
+          const slbl = document.createElement("div");
+          slbl.className = "section-label";
+          slbl.textContent = "Key Metrics";
+          body.appendChild(slbl);
+
+          const grid = document.createElement("div");
+          grid.className = "data-grid";
+          dataEntries.forEach(([k, v]) => {
+            const cell = document.createElement("div");
+            cell.className = "data-cell";
+            const strong = document.createElement("strong");
+            strong.textContent = k.replace(/_/g, " ");
+            const dv = document.createElement("div");
+            dv.className = "dv";
+            dv.textContent = v ?? "\u2014";
+            cell.appendChild(strong);
+            cell.appendChild(dv);
+            grid.appendChild(cell);
+          });
+          body.appendChild(grid);
+        }
+
+        // Actions
+        if (actions.length > 0) {
+          const albl = document.createElement("div");
+          albl.className = "section-label";
+          albl.style.marginTop = "1.1rem";
+          albl.textContent = "Improvement Actions";
+          body.appendChild(albl);
+
+          const ul = document.createElement("ul");
+          ul.className = "actions-list";
+          actions.forEach(a => {
+            const li = document.createElement("li");
+            li.textContent = a;
+            ul.appendChild(li);
+          });
+          body.appendChild(ul);
+        }
+
+        // Raw data
+        const det = document.createElement("details");
+        det.className = "raw-data";
+        const sum = document.createElement("summary");
+        sum.textContent = "View raw data";
+        const pre = document.createElement("pre");
+        pre.textContent = JSON.stringify(data, null, 2);
+        det.appendChild(sum);
+        det.appendChild(pre);
+        body.appendChild(det);
+
+        div.appendChild(body);
+        return div;
       }
 
       function togglePanel(key) {
-        const panel = document.getElementById(`panel-${key}`);
+        const panel = document.getElementById("panel-" + key);
         if (panel) panel.classList.toggle("collapsed");
       }
 
-      // ── Render full report ─────────────────────────────────────────
       function renderReport(data) {
         const sections = data.sections || {};
         const stageMap = [
-          ["P",  "P", "Purpose — Audit Scope & KPI",        sections.P_Purpose],
-          ["R",  "R", "Resources — Evaluation Dataset",     sections.R_Resources],
-          ["O",  "O", "Optimization — Bad Case Analysis",   sections.O_Optimization],
-          ["C",  "C", "Count — Evaluation Planning",        sections.C_Count],
-          ["E",  "E", "Effectiveness — Multi-dim Scores",   sections.E_Effectiveness],
-          ["S1", "S", "Standards — Scoring Handbook",       sections.S_Standards],
-          ["S2", "S", "Scrutiny — Review Pipeline",         sections.S_Scrutiny],
+          ["P",  "P", "Purpose",      "Audit Scope & KPI",           sections.P_Purpose],
+          ["R",  "R", "Resources",    "Evaluation Dataset",          sections.R_Resources],
+          ["O",  "O", "Optimization", "Bad Case Analysis",           sections.O_Optimization],
+          ["C",  "C", "Count",        "Evaluation Planning",         sections.C_Count],
+          ["E",  "E", "Effectiveness","Multi-Dimensional Scores",    sections.E_Effectiveness],
+          ["S1", "S", "Standards",    "Scoring Handbook",            sections.S_Standards],
+          ["S2", "S", "Scrutiny",     "Review Pipeline",             sections.S_Scrutiny],
         ];
 
         resetTabs();
-        document.getElementById("empty-state")?.remove();
+        const emptyEl = document.getElementById("empty-state");
+        if (emptyEl) emptyEl.remove();
 
         const container = document.getElementById("stage-panels");
-        // Remove old panels
         container.querySelectorAll(".stage-panel").forEach(p => p.remove());
 
-        stageMap.forEach(([key, letter, title, sec]) => {
+        stageMap.forEach(([key, letter, title, subtitle, sec]) => {
           if (!sec) return;
-          const html = buildPanel(key, letter, title, sec);
-          container.insertAdjacentHTML("beforeend", html);
+          const panel = buildPanel(key, letter, title, subtitle, sec);
+          container.appendChild(panel);
           markTabDone(key);
         });
 
         // Summary card
         const sc = document.getElementById("summary-card");
-        sc.style.display = "flex";
+        sc.classList.add("show");
 
-        const badReport  = sections.O_Optimization?.data || {};
-        const effReport  = sections.E_Effectiveness?.data  || {};
-        const scrReport  = sections.S_Scrutiny?.data       || {};
-        const planData   = sections.P_Purpose?.data        || {};
+        const badData  = sections.O_Optimization?.data  || {};
+        const effData  = sections.E_Effectiveness?.data || {};
+        const scrData  = sections.S_Scrutiny?.data      || {};
+        const purData  = sections.P_Purpose?.data       || {};
 
-        document.getElementById("sum-cases").textContent =
-          planData.total_sample_size ?? effReport.total_evaluated ?? "—";
-        document.getElementById("sum-bad").textContent =
-          badReport.total_bad_cases ?? "—";
-        document.getElementById("sum-score").textContent =
-          effReport.overall_score != null ? effReport.overall_score.toFixed(2) : "—";
-        document.getElementById("sum-pass").textContent =
-          effReport.pass_rate != null
-            ? `${(effReport.pass_rate * 100).toFixed(1)}%`
-            : scrReport.pass_rate != null
-            ? `${(scrReport.pass_rate * 100).toFixed(1)}%`
-            : "—";
+        const totalCases = purData.total_sample_size ?? effData.total_evaluated ?? "\u2014";
+        const badCases   = badData.total_bad_cases ?? "\u2014";
+        const avgScore   = effData.overall_score != null ? effData.overall_score.toFixed(2) : "\u2014";
+        const passRateRaw = effData.pass_rate ?? scrData.pass_rate ?? null;
+        const passRateStr = passRateRaw != null ? (passRateRaw * 100).toFixed(1) + "%" : "\u2014";
+
+        document.getElementById("sum-cases").textContent = totalCases;
+        document.getElementById("sum-bad").textContent   = badCases;
+        document.getElementById("sum-score").textContent = avgScore;
+        document.getElementById("sum-pass").textContent  = passRateStr;
+
+        // Progress bars
+        if (passRateRaw != null) {
+          const pct = Math.round(passRateRaw * 100);
+          const bar = document.getElementById("prog-pass");
+          bar.style.width = pct + "%";
+          bar.className = "progress-bar-fill " + (pct >= 80 ? "green" : pct >= 50 ? "amber" : "red");
+          document.getElementById("prog-pass-label").textContent = passRateStr;
+        }
+        if (effData.overall_score != null) {
+          const pct = Math.round((effData.overall_score / 5) * 100);
+          document.getElementById("prog-score").style.width = pct + "%";
+          document.getElementById("prog-score-label").textContent = avgScore;
+        }
 
         const risk = data.overall_risk_level || "N/A";
         const riskEl = document.getElementById("sum-risk");
         riskEl.textContent = risk;
-        riskEl.className = `risk-pill ${riskClass(risk)}`;
+        riskEl.className = "risk-pill " + riskClass(risk);
+
+        if (data.created_at) {
+          document.getElementById("sum-created").textContent =
+            "Report generated: " + fmtDate(data.created_at);
+        }
       }
 
-      // ── Run PROCESS ────────────────────────────────────────────────
       async function runProcess() {
         const sid = document.getElementById("session-input").value.trim();
-        if (!sid) { setStatus("Please enter a Session ID.", "error"); return; }
+        if (!sid) { showToast("Please enter a Session ID.", "error"); return; }
 
         const autoEval = document.getElementById("auto-eval-chk").checked;
         const btn = document.getElementById("run-btn");
         btn.disabled = true;
 
-        document.getElementById("status-bar").innerHTML =
-          `<span class="spinner"></span> Running PROCESS pipeline${autoEval ? " with LLM auto-evaluation" : ""}…`;
-
+        setStatus('<span class="spinner"></span> Running PROCESS pipeline' + (autoEval ? " with LLM auto-evaluation" : "") + "\u2026", "");
         stageKeys.forEach(k => markTabLoading(k));
 
         try {
-          const url = `${API_BASE}/process/run/${encodeURIComponent(sid)}?auto_evaluate=${autoEval}`;
+          const url = API_BASE + "/process/run/" + encodeURIComponent(sid) + "?auto_evaluate=" + autoEval;
           const res = await fetch(url, { method: "POST" });
           if (!res.ok) {
             const err = await res.json().catch(() => ({}));
-            setStatus(`Error: ${err.detail || res.statusText}`, "error");
+            showToast("Error: " + (err.detail || res.statusText), "error", 6000);
+            setStatus("Error running PROCESS.", "error");
             resetTabs();
             return;
           }
           const runData = await res.json();
-          setStatus(`✅ Report created — loading details…`, "success");
-
-          // Fetch the full report
+          setStatus("\u2705 Report created \u2014 loading details\u2026", "success");
           await loadReportById(runData.report_id);
           await fetchHistory(sid);
-
+          showToast("\u2705 PROCESS pipeline completed!", "success", 4000);
         } catch (e) {
-          setStatus(`Network error: ${e.message}`, "error");
+          showToast("Network error: " + e.message, "error", 5000);
+          setStatus("Network error.", "error");
           resetTabs();
         } finally {
           btn.disabled = false;
         }
       }
 
-      // ── Load by report ID ──────────────────────────────────────────
       async function loadReport() {
         const val = document.getElementById("session-input").value.trim();
-        if (!val) { setStatus("Enter a report ID or session ID.", "error"); return; }
-
-        // Heuristic: if it looks like a UUID and exists as a report, treat as report ID
+        if (!val) { showToast("Enter a report ID or session ID.", "error"); return; }
         document.getElementById("load-btn").disabled = true;
-        setStatus("Loading report…", "");
+        setStatus('<span class="spinner"></span> Loading report\u2026', "");
         try {
           await loadReportById(val);
-          // Also try to load session history
-          const res2 = await fetch(`${API_BASE}/process/reports/${encodeURIComponent(val)}`);
+          const res2 = await fetch(API_BASE + "/process/reports/" + encodeURIComponent(val));
           if (res2.ok) {
             const list = await res2.json();
             if (list.length > 0) renderHistory(list, val);
           }
         } catch (e) {
-          setStatus(`Error: ${e.message}`, "error");
+          showToast("Error: " + e.message, "error");
+          setStatus("Error loading.", "error");
         } finally {
           document.getElementById("load-btn").disabled = false;
         }
       }
 
       async function loadReportById(reportId) {
-        const res = await fetch(`${API_BASE}/process/report/${encodeURIComponent(reportId)}`);
+        const res = await fetch(API_BASE + "/process/report/" + encodeURIComponent(reportId));
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          setStatus(`Error loading report: ${err.detail || res.statusText}`, "error");
+          showToast("Error loading report: " + (err.detail || res.statusText), "error", 5000);
+          setStatus("Error loading report.", "error");
           return;
         }
         const data = await res.json();
         renderReport(data);
-        setStatus(`✅ Loaded report ${reportId.slice(0, 8)}… (${fmtDate(data.created_at)})`, "success");
+        setStatus("\u2705 Report " + reportId.slice(0, 8) + "\u2026 loaded (" + fmtDate(data.created_at) + ")", "success");
       }
 
-      // ── Session history ────────────────────────────────────────────
       async function fetchHistory(sessionId) {
         try {
-          const res = await fetch(`${API_BASE}/process/reports/${encodeURIComponent(sessionId)}`);
+          const res = await fetch(API_BASE + "/process/reports/" + encodeURIComponent(sessionId));
           if (!res.ok) return;
           const list = await res.json();
           if (list.length > 0) renderHistory(list, sessionId);
-        } catch (_) { /* optional */ }
+        } catch (_) {}
       }
 
       function renderHistory(list, sessionId) {
         const sec = document.getElementById("history-section");
-        sec.style.display = "block";
+        sec.classList.add("show");
         const ul = document.getElementById("history-list");
         ul.innerHTML = "";
         list.forEach(r => {
           const li = document.createElement("li");
-          li.dataset.reportId = r.report_id;
 
           const riskSpan = document.createElement("span");
-          riskSpan.className = `risk-pill ${riskClass(r.overall_risk_level)}`;
-          riskSpan.style.cssText = "font-size:0.75rem;padding:0.15rem 0.6rem";
+          riskSpan.className = "risk-pill " + riskClass(r.overall_risk_level);
+          riskSpan.style.cssText = "font-size:0.72rem;padding:0.15rem 0.6rem";
           riskSpan.textContent = r.overall_risk_level || "N/A";
 
           const idSpan = document.createElement("span");
-          idSpan.style.cssText = "font-family:monospace;font-size:0.8rem";
-          idSpan.textContent = r.report_id.slice(0, 12) + "…";
+          idSpan.className = "hl-id";
+          idSpan.textContent = r.report_id.slice(0, 16) + "\u2026";
 
           const tsSpan = document.createElement("span");
-          tsSpan.className = "ts";
+          tsSpan.className = "hl-ts";
           tsSpan.textContent = fmtDate(r.created_at);
+
+          const agoSpan = document.createElement("span");
+          agoSpan.className = "hl-ago";
+          agoSpan.textContent = relTime(r.created_at);
 
           li.appendChild(riskSpan);
           li.appendChild(idSpan);
           li.appendChild(tsSpan);
+          li.appendChild(agoSpan);
           li.addEventListener("click", () => loadReportById(r.report_id));
           ul.appendChild(li);
         });
       }
 
-      // ── Keyboard shortcut: Enter in session input ──────────────────
       document.getElementById("session-input").addEventListener("keydown", e => {
         if (e.key === "Enter") { e.preventDefault(); runProcess(); }
       });
 
-      // Restore last-used session from localStorage
       const saved = localStorage.getItem("process_session_id");
       if (saved) document.getElementById("session-input").value = saved;
 
