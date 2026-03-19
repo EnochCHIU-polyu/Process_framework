@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from process_framework.api.config import Settings, get_settings
+from process_framework.api.feedback import build_session_guard, inject_guard_prompt
 from process_framework.api.llm import call_llm
 
 router = APIRouter()
@@ -159,8 +160,17 @@ async def chat(
     """
     session_id = req.session_id or str(uuid.uuid4())
 
-    # --- Call LLM (Ollama or OpenAI-compatible) ---
+    # --- Build message list, injecting audit guard for existing sessions ---
     messages = [{"role": m.role, "content": m.content} for m in req.messages]
+    if req.session_id:
+        # Fetch any known bad cases / hallucination findings for this session
+        # and prepend them as a system-level guard so the model avoids
+        # repeating the same failures.
+        guard = await build_session_guard(req.session_id, settings)
+        if guard:
+            messages = inject_guard_prompt(messages, guard)
+
+    # --- Call LLM (Ollama or OpenAI-compatible) ---
     assistant_text = await call_llm(messages, settings, req.temperature)
 
     # --- Persist to Supabase ---
