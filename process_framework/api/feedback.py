@@ -21,6 +21,7 @@ Public surface::
 from __future__ import annotations
 
 from collections import Counter
+from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from typing import Dict, List, Optional, Tuple
 
@@ -91,9 +92,10 @@ async def fetch_session_bad_cases(
 # ---------------------------------------------------------------------------
 
 _GUARD_HEADER = (
-    "[AUDIT FEEDBACK - DO NOT IGNORE]\n"
-    "Previous responses in this session were audited and the following issues "
-    "were identified. You MUST avoid repeating these failures in your next response:\n"
+    "[GLOBAL AUDIT KNOWLEDGE & FEEDBACK]\n"
+    "The following issues have been identified across previous sessions and the "
+    "current one. You MUST apply these lessons to ensure high quality and avoid "
+    "repeating known failure patterns:\n"
 )
 
 _GUARD_FOOTER = (
@@ -117,6 +119,9 @@ _BREVITY_REASON_HINTS = (
     "太长",
     "過長",
     "过长",
+    "markdown",
+    "plain text",
+    "plaintext",
 )
 
 
@@ -125,7 +130,8 @@ def _contains_brevity_signal(text: str) -> bool:
     return any(hint in low for hint in _BREVITY_REASON_HINTS)
 
 
-def _brevity_required(bad_cases: List[Dict]) -> bool:
+def _brevity_required(bad_cases: List[Dict], learned_patterns: Optional[List[Dict]] = None) -> bool:
+    # Check fresh bad cases
     for bc in bad_cases:
         reason = (bc.get("reason") or "").strip()
         expected = (bc.get("expected_output") or "").strip()
@@ -134,6 +140,14 @@ def _brevity_required(bad_cases: List[Dict]) -> bool:
             return True
         if any(_contains_brevity_signal(str(k)) for k in keywords):
             return True
+            
+    # Check learned patterns across all sessions
+    if learned_patterns:
+        for pattern in learned_patterns:
+            desc = (pattern.get("pattern_description") or "").lower()
+            if _contains_brevity_signal(desc):
+                return True
+                
     return False
 
 
@@ -283,43 +297,67 @@ async def fetch_learned_patterns(
 async def upsert_pattern_cluster(
     cluster: Dict,
     settings: Settings,
-) -> None:
+) -> bool:
     """
     Store or update a pattern cluster in the learned_patterns table.
 
-    If a pattern with the same category + keywords already exists,
+    Uses Supabase's UPSERT with 'resolution=merge-duplicates' via a 
+    unique constraint or manual check.
+    
+    If a pattern with the same category + description already exists,
     increment occurrence_count and update last_seen.
     Otherwise create a new pattern.
     """
     category = cluster.get("category", "user_experience")
-    keywords = cluster.get("pattern_keywords", [])
+    keywords = sorted(cluster.get("pattern_keywords", []))
     description = cluster.get("pattern_description", "")
     remediation = cluster.get("remediation_guidance", "")
 
-    # Try to find existing pattern with exact keyword overlap
-    # For simplicity, we'll create new pattern each time with incremented count
-    # (In production, you might use a hash of keywords to check for duplicates)
-    url = f"{settings.supabase_url}/rest/v1/learned_patterns"
-
-    payload = {
-        "category": category,
-        "pattern_keywords": keywords,
-        "pattern_description": description,
-        "remediation_guidance": remediation,
-        "occurrence_count": cluster.get("occurrence_count", 1),
-    }
+    # 1. Try to find if a similar pattern exists (exact category + description match)
+    url = (
+        f"{settings.supabase_url}/rest/v1/learned_patterns"
+        f"?category=eq.{category}&pattern_description=eq.{description}"
+        f"&select=id,occurrence_count"
+    )
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                url,
-                json=payload,
-                headers=_supa_headers(settings),
-            )
-            # Success if 201 (created) or 200 (ok)
-            return resp.status_code in (200, 201)
+            resp = await client.get(url, headers=_supa_headers(settings))
+            existing = resp.json() if resp.status_code == 200 else []
+
+            if existing:
+                # Update existing row
+                row_id = existing[0]["id"]
+                new_count = existing[0].get("occurrence_count", 1) + 1
+                update_url = f"{settings.supabase_url}/rest/v1/learned_patterns?id=eq.{row_id}"
+                await client.patch(
+                    update_url,
+                    json={
+                        "occurrence_count": new_count,
+                        "last_seen": datetime.now(timezone.utc).isoformat(),
+                        "pattern_keywords": keywords,  # Refresh keywords
+                    },
+                    headers=_supa_headers(settings)
+                )
+                return True
+            else:
+                # Create new row
+                create_url = f"{settings.supabase_url}/rest/v1/learned_patterns"
+                payload = {
+                    "category": category,
+                    "pattern_keywords": keywords,
+                    "pattern_description": description,
+                    "remediation_guidance": remediation,
+                    "occurrence_count": cluster.get("occurrence_count", 1),
+                }
+                resp = await client.post(
+                    create_url,
+                    json=payload,
+                    headers=_supa_headers(settings),
+                )
+                return resp.status_code in (200, 201)
     except Exception:  # noqa: BLE001
-        pass  # Fail gracefully; it's ok if we can't store
+        return False  # Fail gracefully; it's ok if we can't store
 
 
 def _build_prompt_policy(
@@ -472,41 +510,17 @@ def build_guard_prompt(
         for item in learned_corrections:
             lines.append(f"- {item}")
 
-    if _brevity_required(bad_cases):
+    if _brevity_required(bad_cases, learned_patterns):
         lines.extend(
             [
                 "",
                 "[MANDATORY RESPONSE CONTRACT]",
                 "BREVITY_MODE=ON",
-                "- Keep the final answer concise and practical.",
-                "- Maximum 4 bullet points OR 4 short sentences.",
-                "- No long preface, no repeated explanation, no extra sections.",
-                "- If user asks for more detail, then expand in follow-up.",
-            ]
-        )
-
-    lines.append("")
-    lines.append("[S/S - SELF SCRUTINY CHECKLIST BEFORE RESPONDING]")
-    for item in scrutiny_checklist:
-        lines.append(f"- {item}")
-
-    lines.append(_GUARD_FOOTER)
-    return "\n".join(lines)
-
-    if learned_corrections:
-        lines.append("")
-        lines.append("[LEARNED CORRECTION PATTERNS]")
-        for item in learned_corrections:
-            lines.append(f"- {item}")
-
-    if _brevity_required(bad_cases):
-        lines.extend(
-            [
-                "",
-                "[MANDATORY RESPONSE CONTRACT]",
-                "BREVITY_MODE=ON",
-                "- Keep the final answer concise and practical.",
-                "- Maximum 4 bullet points OR 4 short sentences.",
+                "PLAINTEXT_MODE=ON",
+                "- DO NOT use Markdown formatting (NO **, ##, ###, -, 1., etc.).",
+                "- Output MUST be pure plain text.",
+                "- Keep the final answer concise and practical (20-50 words).",
+                "- Maximum 4 bullet points (using standard characters like *) OR 4 short sentences.",
                 "- No long preface, no repeated explanation, no extra sections.",
                 "- If user asks for more detail, then expand in follow-up.",
             ]

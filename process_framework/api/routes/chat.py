@@ -228,16 +228,15 @@ async def chat(
     """
     session_id = req.session_id or str(uuid.uuid4())
 
-    # --- Build message list, injecting audit guard for existing sessions ---
+    # --- Build message list, injecting audit guard for global learning ---
     messages = [{"role": m.role, "content": m.content} for m in req.messages]
-    guard: Optional[str] = None
-    if req.session_id:
-        # Fetch any known bad cases / hallucination findings for this session
-        # and prepend them as a system-level guard so the model avoids
-        # repeating the same failures.
-        guard = await build_session_guard(req.session_id, settings)
-        if guard:
-            messages = inject_guard_prompt(messages, guard)
+    
+    # Global Learning: Always build session guard regardless of session_id presence
+    # Since build_session_guard also fetches global learned patterns, 
+    # it ensures every chat session starts with historical knowledge.
+    guard = await build_session_guard(session_id, settings)
+    if guard:
+        messages = inject_guard_prompt(messages, guard)
 
     # --- Call LLM (Ollama or OpenAI-compatible) ---
     effective_temperature = req.temperature

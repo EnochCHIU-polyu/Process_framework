@@ -9,10 +9,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
 from process_framework.api.config import Settings, get_settings
+from process_framework.api.feedback import build_session_guard
 
 router = APIRouter()
 
@@ -139,6 +140,7 @@ async def _insert_audit_verdict(
 async def mark_bad(
     message_id: str,
     req: MarkBadRequest,
+    background_tasks: BackgroundTasks,
     settings: Settings = Depends(get_settings),
 ) -> Any:
     """
@@ -146,6 +148,7 @@ async def mark_bad(
 
     - Inserts a row into ``bad_cases`` with detailed attribution.
     - Inserts a new ``ai_audits`` row with ``verdict=bad_case``.
+    - Triggers clustering and pattern learning in the background.
     """
     async with httpx.AsyncClient(timeout=30.0) as client:
         msg = await _fetch_message(client, settings, message_id)
@@ -158,6 +161,9 @@ async def mark_bad(
         await _insert_audit_verdict(
             client, settings, audit_id, message_id, session_id, bad_case_id
         )
+        
+        # Trigger learning/clustering in the background to avoid blocking the response
+        background_tasks.add_task(build_session_guard, session_id, settings)
 
     return MarkBadResponse(
         bad_case_id=bad_case_id,

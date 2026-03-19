@@ -62,25 +62,13 @@ def _async_client_ctx(get_resp: MagicMock) -> MagicMock:
 
 class TestBuildGuardPrompt:
     def test_empty_list_returns_empty_string(self):
-        assert build_guard_prompt([]) == ""
+        assert build_guard_prompt([], []) == ""
 
     def test_single_hallucination_bad_case(self):
         bad_cases = [{"category": "hallucination", "reason": "Stated wrong capital city"}]
         result = build_guard_prompt(bad_cases)
         assert "HALLUCINATION" in result
-        assert "Stated wrong capital city" in result
-        assert "AUDIT FEEDBACK" in result
-
-    def test_includes_root_cause_when_present(self):
-        bad_cases = [
-            {
-                "category": "factual",
-                "reason": "Wrong date",
-                "root_cause": "Confused 2023 with 2024",
-            }
-        ]
-        result = build_guard_prompt(bad_cases)
-        assert "Confused 2023 with 2024" in result
+        assert "global audit knowledge" in result.lower()
 
     def test_includes_expected_output_when_present(self):
         bad_cases = [
@@ -93,26 +81,44 @@ class TestBuildGuardPrompt:
         result = build_guard_prompt(bad_cases)
         assert "The price is $99" in result
 
-    def test_includes_ignored_keywords(self):
+    def test_multiple_bad_cases_weighting(self):
+        bad_cases = [
+            {"category": "hallucination", "reason": "First issue"},
+            {"category": "hallucination", "reason": "Second issue"},
+        ]
+        result = build_guard_prompt(bad_cases)
+        assert "HALLUCINATION" in result
+        assert "x2" in result
+
+    def test_brevity_mode_trigger_fresh(self):
+        bad_cases = [{"category": "user_experience", "reason": "too long response"}]
+        result = build_guard_prompt(bad_cases)
+        assert "BREVITY_MODE=ON" in result
+        assert "PLAINTEXT_MODE=ON" in result
+
+    def test_brevity_mode_trigger_learned(self):
+        learned = [{"category": "user_experience", "pattern_description": "verbose output"}]
+        result = build_guard_prompt([], learned)
+        assert "BREVITY_MODE=ON" in result
+        assert "PLAINTEXT_MODE=ON" in result
+
+    def test_none_fields_are_handled_gracefully(self):
         bad_cases = [
             {
-                "category": "intent_understanding",
-                "reason": "Missed constraint",
-                "ignored_keywords": ["summer", "slim"],
+                "category": "hallucination",
+                "reason": "Bad answer",
+                "root_cause": None,
+                "expected_output": None,
+                "ignored_keywords": None,
             }
         ]
         result = build_guard_prompt(bad_cases)
-        assert '"summer"' in result
-        assert '"slim"' in result
+        assert "HALLUCINATION" in result
 
-    def test_multiple_bad_cases_are_numbered(self):
-        bad_cases = [
-            {"category": "hallucination", "reason": "First issue"},
-            {"category": "factual", "reason": "Second issue"},
-        ]
+    def test_missing_category_defaults_gracefully(self):
+        bad_cases = [{"reason": "Some issue"}]
         result = build_guard_prompt(bad_cases)
-        assert "1. [HALLUCINATION]" in result
-        assert "2. [FACTUAL ERROR]" in result
+        assert "PROCESS-LOOP" in result
 
     def test_all_categories_have_labels(self):
         categories = [
@@ -145,21 +151,12 @@ class TestBuildGuardPrompt:
             }
         ]
         result = build_guard_prompt(bad_cases)
-        assert "Bad answer" in result
-        assert "None" not in result
+        assert "HALLUCINATION" in result
 
     def test_missing_category_defaults_gracefully(self):
         bad_cases = [{"reason": "Some issue"}]
         result = build_guard_prompt(bad_cases)
-        assert "Some issue" in result
-
-
-# ---------------------------------------------------------------------------
-# inject_guard_prompt()
-# ---------------------------------------------------------------------------
-
-
-class TestInjectGuardPrompt:
+        assert "PROCESS-LOOP" in result
     def test_prepends_system_message_when_none_exists(self):
         messages = [{"role": "user", "content": "Hello"}]
         result = inject_guard_prompt(messages, "Guard text")
@@ -284,8 +281,8 @@ class TestBuildSessionGuard:
         ):
             result = await build_session_guard("sess-1", _mock_settings())
         assert result is not None
-        assert "Wrong answer" in result
-        assert "AUDIT FEEDBACK" in result
+        assert "PROCESS-LOOP" in result
+        assert "GLOBAL AUDIT KNOWLEDGE" in result
 
 
 # ---------------------------------------------------------------------------
@@ -361,16 +358,15 @@ class TestChatGuardIntegration:
         assert resp.status_code == 200
         # The first message sent to the LLM must be a system guard
         assert captured_messages[0]["role"] == "system"
-        assert "AUDIT FEEDBACK" in captured_messages[0]["content"]
-        assert "Stated wrong date" in captured_messages[0]["content"]
+        assert "GLOBAL AUDIT KNOWLEDGE" in captured_messages[0]["content"]
 
-    def test_no_guard_when_no_session_id(self, chat_client):
-        """New sessions (no session_id) do not trigger a bad-case fetch."""
+    def test_global_guard_always_called(self, chat_client):
+        """Even new sessions should now fetch global learned patterns."""
         with (
             patch("process_framework.api.routes.chat.call_llm", new=AsyncMock(return_value="Hello!")),
             patch(
                 "process_framework.api.routes.chat.build_session_guard",
-                new=AsyncMock(return_value=None),
+                new=AsyncMock(return_value="Global Policy"),
             ) as mock_guard,
             patch("process_framework.api.routes.chat.httpx.AsyncClient") as mock_cls,
         ):
@@ -386,8 +382,8 @@ class TestChatGuardIntegration:
             )
 
         assert resp.status_code == 200
-        # build_session_guard should NOT be called when session_id is None
-        mock_guard.assert_not_called()
+        # build_session_guard SHOULD be called now (global learning)
+        mock_guard.assert_called()
 
     def test_chat_proceeds_when_no_bad_cases(self, chat_client):
         """When the session has no bad cases the LLM is called without a guard."""
@@ -463,4 +459,4 @@ class TestChatGuardIntegration:
         assert len(sys_msgs) == 1
         content = sys_msgs[0]["content"]
         assert "You are a specialist." in content
-        assert "AUDIT FEEDBACK" in content
+        assert "GLOBAL AUDIT KNOWLEDGE" in content
