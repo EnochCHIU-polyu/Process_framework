@@ -39,6 +39,13 @@ class ProcessRunResponse(BaseModel):
     auto_evaluated: bool = False
 
 
+class ProcessReportSummary(BaseModel):
+    report_id: str
+    session_id: str
+    overall_risk_level: Optional[str]
+    created_at: str
+
+
 # ---------------------------------------------------------------------------
 # Supabase helpers
 # ---------------------------------------------------------------------------
@@ -273,3 +280,89 @@ async def run_process(
         total_cases=len(evaluation_cases),
         auto_evaluated=bool(llm_judge_scores),
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /process/report/{report_id}  — fetch a persisted PROCESS report
+# ---------------------------------------------------------------------------
+
+
+@router.get("/process/report/{report_id}")
+async def get_process_report(
+    report_id: str,
+    settings: Settings = Depends(get_settings),
+) -> Any:
+    """Return the full PROCESS report JSON for *report_id*."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        url = (
+            f"{settings.supabase_url}/rest/v1/process_reports"
+            f"?id=eq.{report_id}&select=id,session_id,report,created_at"
+        )
+        resp = await client.get(url, headers=_supa_headers(settings))
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Supabase error: {resp.text}")
+    rows = resp.json()
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"Report {report_id!r} not found.")
+    row = rows[0]
+    return {
+        "report_id": row["id"],
+        "session_id": row["session_id"],
+        "created_at": row["created_at"],
+        **row["report"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /process/reports/{session_id}  — list reports for a session
+# ---------------------------------------------------------------------------
+
+
+@router.get("/process/reports/{session_id}")
+async def list_process_reports(
+    session_id: str,
+    settings: Settings = Depends(get_settings),
+) -> Any:
+    """Return a list of PROCESS report summaries for *session_id*, newest first."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        url = (
+            f"{settings.supabase_url}/rest/v1/process_reports"
+            f"?session_id=eq.{session_id}"
+            f"&order=created_at.desc"
+            f"&select=id,session_id,created_at,report->overall_risk_level"
+        )
+        resp = await client.get(url, headers=_supa_headers(settings))
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Supabase error: {resp.text}")
+    rows = resp.json()
+    return [
+        ProcessReportSummary(
+            report_id=row["id"],
+            session_id=row["session_id"],
+            overall_risk_level=row.get("overall_risk_level"),
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
+# ---------------------------------------------------------------------------
+# GET /sessions  — list distinct session IDs that have chat messages
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sessions")
+async def list_sessions(
+    settings: Settings = Depends(get_settings),
+) -> Any:
+    """Return the most-recent 50 chat sessions (newest first)."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        url = (
+            f"{settings.supabase_url}/rest/v1/chat_sessions"
+            f"?order=created_at.desc&limit=50"
+            f"&select=id,created_at"
+        )
+        resp = await client.get(url, headers=_supa_headers(settings))
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Supabase error: {resp.text}")
+    return resp.json()
