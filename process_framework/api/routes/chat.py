@@ -8,6 +8,7 @@ Supports two backends via the LLM_BACKEND setting:
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -21,6 +22,73 @@ from process_framework.api.feedback import build_session_guard, inject_guard_pro
 from process_framework.api.llm import call_llm
 
 router = APIRouter()
+
+
+def _brevity_mode_on(guard: Optional[str]) -> bool:
+    return bool(guard and "BREVITY_MODE=ON" in guard)
+
+
+def _is_too_long_response(text: str) -> bool:
+    line_count = len([line for line in text.splitlines() if line.strip()])
+    word_count = len(text.split())
+    char_count = len(text)
+    return line_count > 6 or word_count > 80 or char_count > 320
+
+
+def _force_concise_output(text: str) -> str:
+    cleaned = text.strip()
+    if not cleaned:
+        return cleaned
+
+    lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
+    bullet_like = [
+        line
+        for line in lines
+        if re.match(r"^(?:[-*•]|\d+[\.)])\s*", line)
+    ]
+    if bullet_like:
+        return "\n".join(bullet_like[:4])
+
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r"(?<=[。！？!?\.])\s*", cleaned)
+        if sentence.strip()
+    ]
+    if sentences:
+        concise = " ".join(sentences[:4]).strip()
+        if len(concise) > 240:
+            return concise[:240].rstrip() + "…"
+        return concise
+
+    if len(cleaned) > 240:
+        return cleaned[:240].rstrip() + "…"
+    return cleaned
+
+
+async def _rewrite_to_concise_if_needed(
+    assistant_text: str,
+    settings: Settings,
+) -> str:
+    if not _is_too_long_response(assistant_text):
+        return assistant_text
+
+    rewrite_messages = [
+        {
+            "role": "system",
+            "content": (
+                "Rewrite the answer to be concise and direct. "
+                "Keep key facts only. "
+                "Output max 4 bullet points or 4 short sentences. "
+                "No preface and no extra sections."
+            ),
+        },
+        {"role": "user", "content": assistant_text},
+    ]
+    rewritten = await call_llm(rewrite_messages, settings, temperature=0.0)
+    candidate = rewritten or assistant_text
+    if _is_too_long_response(candidate):
+        return _force_concise_output(candidate)
+    return candidate
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +230,7 @@ async def chat(
 
     # --- Build message list, injecting audit guard for existing sessions ---
     messages = [{"role": m.role, "content": m.content} for m in req.messages]
+    guard: Optional[str] = None
     if req.session_id:
         # Fetch any known bad cases / hallucination findings for this session
         # and prepend them as a system-level guard so the model avoids
@@ -171,7 +240,14 @@ async def chat(
             messages = inject_guard_prompt(messages, guard)
 
     # --- Call LLM (Ollama or OpenAI-compatible) ---
-    assistant_text = await call_llm(messages, settings, req.temperature)
+    effective_temperature = req.temperature
+    if _brevity_mode_on(guard):
+        effective_temperature = min(req.temperature, 0.2)
+
+    assistant_text = await call_llm(messages, settings, effective_temperature)
+
+    if _brevity_mode_on(guard):
+        assistant_text = await _rewrite_to_concise_if_needed(assistant_text, settings)
 
     # --- Persist to Supabase ---
     async with httpx.AsyncClient(timeout=30.0) as client:

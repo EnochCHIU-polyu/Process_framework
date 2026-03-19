@@ -11,6 +11,13 @@ build/
 *.egg
 .eggs/
 
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Desktop.ini
+
 # Virtual environments
 .venv/
 venv/
@@ -29,3 +36,13 @@ htmlcov/
 .idea/
 .vscode/
 *.swp
+
+# Database / Local data
+*.db
+*.sqlite
+*.sqlite3
+data/
+outputs/
+
+# Local logs
+*.log
