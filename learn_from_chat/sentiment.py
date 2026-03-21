@@ -15,6 +15,13 @@ _CRITICAL_KEYWORDS = (
     "mistake",
     "not true",
     "bad answer",
+    "reanswer",
+    "answer again",
+    "please reanswer",
+    "not correct",
+    "disagree",
+    "dissage",
+    "i feel bad",
 )
 
 

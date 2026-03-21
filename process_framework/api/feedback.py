@@ -67,6 +67,7 @@ async def fetch_session_bad_cases(
 ) -> List[Dict]:
     """
     Return all bad-case records for *session_id* from Supabase.
+    Prioritizes session-specific bad cases but includes recent global ones too.
 
     Returns an empty list on any network or parsing error so that callers can
     always proceed safely even when Supabase is unavailable.
@@ -75,7 +76,40 @@ async def fetch_session_bad_cases(
         f"{settings.supabase_url}/rest/v1/bad_cases"
         f"?session_id=eq.{session_id}"
         f"&order=created_at.desc"
-        f"&select=category,reason,ignored_keywords,root_cause,expected_output,actual_output,created_at"
+        f"&select=category,reason,ignored_keywords,root_cause,expected_output,actual_output,created_at,session_id"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=_supa_headers(settings))
+            if resp.status_code != 200:
+                return []
+            return resp.json() or []
+    except Exception:  # noqa: BLE001 - degrade gracefully
+        return []
+
+
+async def fetch_global_bad_cases(
+    settings: Settings,
+    limit: int = 20,
+) -> List[Dict]:
+    """
+    Return recent bad-case records from ALL sessions (global learning).
+    Ordered by recency so most recent corrections are prioritized.
+    
+    This allows LLM to learn from corrections in other sessions/chats.
+
+    Args:
+        settings: Configuration with Supabase credentials
+        limit: Maximum number of global bad cases to fetch
+
+    Returns:
+        List of bad case dicts, empty list on error
+    """
+    url = (
+        f"{settings.supabase_url}/rest/v1/bad_cases"
+        f"?order=created_at.desc"
+        f"&limit={limit}"
+        f"&select=category,reason,ignored_keywords,root_cause,expected_output,actual_output,created_at,session_id"
     )
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -93,9 +127,9 @@ async def fetch_session_bad_cases(
 
 _GUARD_HEADER = (
     "[GLOBAL AUDIT KNOWLEDGE & FEEDBACK]\n"
-    "The following issues have been identified across previous sessions and the "
-    "current one. You MUST apply these lessons to ensure high quality and avoid "
-    "repeating known failure patterns:\n"
+    "The following issues have been identified across current and previous chat sessions. "
+    "You MUST apply these lessons across ALL chat topics to ensure quality and avoid "
+    "repeating known failure patterns (these are learned from corrections by users):\n"
 )
 
 _GUARD_FOOTER = (
@@ -586,19 +620,32 @@ async def build_session_guard(
     patterns, and return a guard prompt string.
 
     Flow:
-    1. Fetch all bad cases for this session
-    2. Cluster bad cases to deduplicate similar meanings
-    3. Store non-duplicate clusters in learned_patterns table
-    4. Fetch top learned patterns from DB (accumulated across sessions)
-    5. Build guard from fresh clusters + accumulated patterns
+    1. Fetch session-specific bad cases (this chat)
+    2. Also fetch recent global bad cases (from all other sessions)
+    3. Combine and cluster to deduplicate similar meanings
+    4. Store non-duplicate clusters in learned_patterns table
+    5. Fetch top learned patterns from DB (accumulated across sessions)
+    6. Build guard from combined bad cases + accumulated patterns
 
     Returns ``None`` when there are no bad cases and no learned patterns
     to report so callers can skip injection with a simple ``if guard:`` check.
     """
-    bad_cases = await fetch_session_bad_cases(session_id, settings)
-
-    # Cluster bad cases to deduplicate similar meanings
-    clusters = _cluster_bad_cases(bad_cases)
+    # Fetch BOTH session-specific and global bad cases
+    session_bad_cases = await fetch_session_bad_cases(session_id, settings)
+    global_bad_cases = await fetch_global_bad_cases(settings, limit=15)
+    
+    # Combine: session-specific first (higher priority), then recent global
+    all_bad_cases = session_bad_cases.copy()
+    
+    # Add global cases that aren't already in session (avoid duplicates)
+    session_ids_seen = {bc.get("session_id") for bc in session_bad_cases}
+    for gbc in global_bad_cases:
+        if gbc.get("session_id") not in session_ids_seen:
+            all_bad_cases.append(gbc)
+            session_ids_seen.add(gbc.get("session_id"))
+    
+    # Cluster combined bad cases to deduplicate similar meanings
+    clusters = _cluster_bad_cases(all_bad_cases)
 
     # For each cluster, store in learned_patterns table
     for cluster in clusters:
@@ -608,7 +655,7 @@ async def build_session_guard(
     # Get top patterns across all categories
     learned_patterns = await fetch_learned_patterns(None, settings)
 
-    # Build guard from fresh clusters + learned patterns
-    guard_text = build_guard_prompt(bad_cases, learned_patterns)
+    # Build guard from combined bad cases + learned patterns
+    guard_text = build_guard_prompt(all_bad_cases, learned_patterns)
 
     return guard_text if guard_text.strip() else None

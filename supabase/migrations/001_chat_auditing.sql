@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS ai_audits (
                     CHECK (status IN ('pending', 'suspected_hallucination', 'reviewed')),
     verdict     TEXT CHECK (verdict IN ('ok', 'bad_case', NULL)),
     bad_case_id UUID,
+    report_context JSONB NOT NULL DEFAULT '{}'::JSONB,
+    analysis_label TEXT,
+    analysis_summary TEXT,
+    triaged_at TIMESTAMPTZ,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -92,6 +96,48 @@ BEGIN
             FOREIGN KEY (bad_case_id) REFERENCES bad_cases (id) ON DELETE SET NULL;
     END IF;
 END $$;
+
+-- Ensure newer triage columns exist for already-deployed databases
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'ai_audits' AND column_name = 'report_context'
+    ) THEN
+        ALTER TABLE ai_audits
+            ADD COLUMN report_context JSONB NOT NULL DEFAULT '{}'::JSONB;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'ai_audits' AND column_name = 'analysis_label'
+    ) THEN
+        ALTER TABLE ai_audits
+            ADD COLUMN analysis_label TEXT;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'ai_audits' AND column_name = 'analysis_summary'
+    ) THEN
+        ALTER TABLE ai_audits
+            ADD COLUMN analysis_summary TEXT;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'ai_audits' AND column_name = 'triaged_at'
+    ) THEN
+        ALTER TABLE ai_audits
+            ADD COLUMN triaged_at TIMESTAMPTZ;
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_ai_audits_analysis_label ON ai_audits (analysis_label);
 
 -- ---------------------------------------------------------------------------
 -- 5. process_reports

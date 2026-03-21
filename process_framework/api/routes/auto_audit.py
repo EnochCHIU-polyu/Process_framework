@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from process_framework.api.auto_audit import (
     AutoAuditResult,
     persist_auto_audit_report,
+    promote_bad_cases_from_report,
     run_auto_audit,
 )
 from process_framework.api.config import Settings, get_settings
@@ -66,6 +67,7 @@ async def run_auto_audit_endpoint(
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             await persist_auto_audit_report(client, settings, result)
+            await promote_bad_cases_from_report(client, settings, result)
         except Exception as e:
             pass  # 記錄失敗但不中斷審計
 

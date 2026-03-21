@@ -69,3 +69,118 @@ async def save_user_correction(
         return None
 
     return str(payload["id"])
+
+
+async def mark_audit_as_bad_case(
+    session_id: str,
+    corrected_message_id: str,
+    bad_case_id: str,
+    settings: Settings,
+) -> bool:
+    url = (
+        f"{settings.supabase_url}/rest/v1/ai_audits"
+        f"?session_id=eq.{session_id}&message_id=eq.{corrected_message_id}"
+    )
+    payload = {
+        "status": "suspected_hallucination",
+        "verdict": "bad_case",
+        "bad_case_id": bad_case_id,
+    }
+    headers = {
+        **_headers(settings),
+        "Prefer": "return=minimal",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.patch(url, json=payload, headers=headers)
+        if resp.status_code not in (200, 204):
+            logger.warning("Failed updating ai_audits as bad_case: %s", resp.text)
+            return False
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Exception updating ai_audits as bad_case: %s", exc)
+        return False
+
+    return True
+
+
+async def attach_feedback_context_to_audit(
+    session_id: str,
+    corrected_message_id: str,
+    user_question: str,
+    assistant_answer: str,
+    user_feedback: str,
+    settings: Settings,
+) -> bool:
+    url = (
+        f"{settings.supabase_url}/rest/v1/ai_audits"
+        f"?session_id=eq.{session_id}&message_id=eq.{corrected_message_id}"
+    )
+    payload = {
+        "status": "pending",
+        "report_context": {
+            "user_question": user_question,
+            "assistant_answer": assistant_answer,
+            "user_feedback": user_feedback,
+        },
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.patch(url, json=payload, headers=_headers(settings))
+        if resp.status_code not in (200, 204):
+            logger.warning("Failed attaching feedback context to ai_audits: %s", resp.text)
+            return False
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Exception attaching feedback context to ai_audits: %s", exc)
+        return False
+
+    return True
+
+
+async def finalize_audit_triage(
+    session_id: str,
+    corrected_message_id: str,
+    classification: str,
+    summary: str,
+    settings: Settings,
+    bad_case_id: Optional[str] = None,
+) -> bool:
+    normalized = classification.strip().lower()
+    if normalized == "bad_case":
+        status = "suspected_hallucination"
+        verdict = "bad_case"
+        label = "bad_case"
+    elif normalized == "preference":
+        status = "reviewed"
+        verdict = "ok"
+        label = "preference"
+    else:
+        status = "reviewed"
+        verdict = "ok"
+        label = "unclear"
+
+    url = (
+        f"{settings.supabase_url}/rest/v1/ai_audits"
+        f"?session_id=eq.{session_id}&message_id=eq.{corrected_message_id}"
+    )
+    payload = {
+        "status": status,
+        "verdict": verdict,
+        "bad_case_id": bad_case_id,
+        "analysis_label": label,
+        "analysis_summary": summary,
+        "triaged_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.patch(url, json=payload, headers=_headers(settings))
+        if resp.status_code not in (200, 204):
+            logger.warning("Failed finalizing ai_audits triage: %s", resp.text)
+            return False
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Exception finalizing ai_audits triage: %s", exc)
+        return False
+
+    return True

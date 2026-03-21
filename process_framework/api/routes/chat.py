@@ -9,6 +9,7 @@ Supports two backends via the LLM_BACKEND setting:
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
@@ -19,11 +20,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from learn_from_chat.orchestrator import process_feedback_and_learn
+from process_framework.api.auto_audit import (
+    persist_auto_audit_report,
+    promote_bad_cases_from_report,
+    run_auto_audit,
+)
 from process_framework.api.config import Settings, get_settings
 from process_framework.api.feedback import build_session_guard, inject_guard_prompt
 from process_framework.api.llm import call_llm
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _brevity_mode_on(guard: Optional[str]) -> bool:
@@ -97,15 +104,31 @@ async def _safe_process_feedback_learning(
     session_id: str,
     messages: List[ChatMessage],
     settings: Settings,
-) -> None:
+) -> Optional[str]:
     try:
-        await process_feedback_and_learn(
+        return await process_feedback_and_learn(
             session_id=session_id,
             messages=messages,
             settings=settings,
         )
-    except Exception:
-        return
+    except Exception as exc:
+        logger.warning("Feedback learning failed: %s", exc)
+        return None
+
+
+async def _safe_auto_audit_session(
+    session_id: str,
+    settings: Settings,
+) -> None:
+    try:
+        result = await run_auto_audit(settings, session_id=session_id)
+        if result.total_pairs_analyzed == 0:
+            return
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            await persist_auto_audit_report(client, settings, result)
+            await promote_bad_cases_from_report(client, settings, result)
+    except Exception as exc:
+        logger.warning("Auto-audit background run failed for session %s: %s", session_id, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +153,7 @@ class ChatResponse(BaseModel):
     session_id: str
     assistant_message: str
     assistant_message_id: str
+    auto_bad_case_id: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -290,17 +314,19 @@ async def chat(
         # Create audit record
         await _insert_audit(client, settings, assistant_message_id, session_id)
 
-    # Launch feedback-learning loop in background without blocking response latency.
-    asyncio.create_task(
-        _safe_process_feedback_learning(
-            session_id=session_id,
-            messages=list(req.messages),
-            settings=settings,
-        )
+    # Run feedback-learning before response so auto-flag is reliable and visible to UI.
+    auto_bad_case_id = await _safe_process_feedback_learning(
+        session_id=session_id,
+        messages=list(req.messages),
+        settings=settings,
     )
+
+    # Auto-run session audit (no button needed), keep non-blocking for chat latency.
+    asyncio.create_task(_safe_auto_audit_session(session_id=session_id, settings=settings))
 
     return ChatResponse(
         session_id=session_id,
         assistant_message=assistant_text,
         assistant_message_id=assistant_message_id,
+        auto_bad_case_id=auto_bad_case_id,
     )
