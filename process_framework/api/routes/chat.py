@@ -8,6 +8,7 @@ Supports two backends via the LLM_BACKEND setting:
 
 from __future__ import annotations
 
+import asyncio
 import re
 import uuid
 from datetime import datetime, timezone
@@ -17,6 +18,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from learn_from_chat.orchestrator import process_feedback_and_learn
 from process_framework.api.config import Settings, get_settings
 from process_framework.api.feedback import build_session_guard, inject_guard_prompt
 from process_framework.api.llm import call_llm
@@ -89,6 +91,21 @@ async def _rewrite_to_concise_if_needed(
     if _is_too_long_response(candidate):
         return _force_concise_output(candidate)
     return candidate
+
+
+async def _safe_process_feedback_learning(
+    session_id: str,
+    messages: List[ChatMessage],
+    settings: Settings,
+) -> None:
+    try:
+        await process_feedback_and_learn(
+            session_id=session_id,
+            messages=messages,
+            settings=settings,
+        )
+    except Exception:
+        return
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +289,15 @@ async def chat(
 
         # Create audit record
         await _insert_audit(client, settings, assistant_message_id, session_id)
+
+    # Launch feedback-learning loop in background without blocking response latency.
+    asyncio.create_task(
+        _safe_process_feedback_learning(
+            session_id=session_id,
+            messages=list(req.messages),
+            settings=settings,
+        )
+    )
 
     return ChatResponse(
         session_id=session_id,

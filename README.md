@@ -15,6 +15,7 @@ The project provides:
 - Supabase persistence for chat history, audits, bad cases, and learned patterns
 - A simple browser chat UI (`chat_ui.html`)
 - Automated bad-case learning with clustering/pattern reuse
+- A hybrid feedback-learning module in `learn_from_chat/` (BERT detection + LLM extraction)
 
 Core package: `process_framework/`
 
@@ -104,12 +105,32 @@ open chat_ui.html
 
 ---
 
+## Feedback-learning module
+
+This project includes a dedicated sub-module for learning from user corrections:
+
+- Path: `learn_from_chat/`
+- Purpose: detect dissatisfaction in latest user messages and capture correction data
+- Output target: `bad_cases` table in Supabase for future learning loops
+
+For setup, internals, and extension notes, read:
+
+- `learn_from_chat/README.md`
+
+---
+
 ## Project layout
 
 ```text
 Project_framework/
 ├── README.md                    # main start guide
 ├── chat_ui.html
+├── learn_from_chat/            # Feedback-learning sub-module
+│   ├── sentiment.py
+│   ├── correction_extractor.py
+│   ├── db_handler.py
+│   ├── orchestrator.py
+│   └── README.md
 ├── examples/                    # Demos and framework examples
 │   ├── demo_full_process.py
 │   └── example_bad_case_learning.py
