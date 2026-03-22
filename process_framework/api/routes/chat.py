@@ -147,6 +147,7 @@ class ChatRequest(BaseModel):
     room_id: Optional[str] = None
     messages: List[ChatMessage]
     temperature: float = 0.7
+    chat_model: Optional[str] = None  # Optional override for chat-specific model
 
 
 class ChatResponse(BaseModel):
@@ -284,7 +285,9 @@ async def chat(
     if _brevity_mode_on(guard):
         effective_temperature = min(req.temperature, 0.2)
 
-    assistant_text = await call_llm(messages, settings, effective_temperature)
+    assistant_text = await call_llm(
+        messages, settings, effective_temperature, model_override=req.chat_model
+    )
 
     if _brevity_mode_on(guard):
         assistant_text = await _rewrite_to_concise_if_needed(assistant_text, settings)

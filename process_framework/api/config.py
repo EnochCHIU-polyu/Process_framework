@@ -32,7 +32,12 @@ class Settings(BaseSettings):
     # OpenAI (base_url="https://api.openai.com/v1"), or any compatible endpoint.
     openai_api_key: Optional[str] = None
     openai_base_url: str = "https://api.poe.com/v1"
-    openai_model: str = "deepseek-v3.2"
+    openai_model: str = "deepseek-v3.2"  # Default logic model
+    
+    # Chat-specific model (can be different for testing/hallucinations)
+    # If not set, falls back to openai_model
+    chat_openai_model: Optional[str] = None
+    chat_ollama_model: Optional[str] = None
 
     # Server
     cors_origins: list[str] = ["*"]

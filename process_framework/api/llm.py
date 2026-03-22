@@ -38,14 +38,16 @@ async def call_llm(
     messages: List[Dict[str, str]],
     settings: Settings,
     temperature: float = 0.7,
+    model_override: str | None = None,
 ) -> str:
     """
     Call the configured LLM backend and return the assistant text.
 
     Args:
-        messages:    OpenAI-style message list (``[{"role": ..., "content": ...}]``).
-        settings:    Loaded :class:`Settings` instance.
-        temperature: Sampling temperature passed to the model.
+        messages:       OpenAI-style message list (``[{"role": ..., "content": ...}]``).
+        settings:       Loaded :class:`Settings` instance.
+        temperature:    Sampling temperature passed to the model.
+        model_override: Optional model name to use instead of the default configured model.
 
     Returns:
         The assistant's reply as a plain string.
@@ -55,9 +57,9 @@ async def call_llm(
     """
     backend = settings.llm_backend.lower()
     if backend == "ollama":
-        return await _call_ollama(messages, settings, temperature)
+        return await _call_ollama(messages, settings, temperature, model_override)
     if backend == "openai":
-        return await _call_openai(messages, settings, temperature)
+        return await _call_openai(messages, settings, temperature, model_override)
     raise HTTPException(
         status_code=500,
         detail=(
@@ -76,9 +78,11 @@ async def _call_ollama(
     messages: List[Dict[str, str]],
     settings: Settings,
     temperature: float,
+    model_override: str | None = None,
 ) -> str:
+    model = model_override or settings.chat_ollama_model or settings.ollama_model
     payload: Dict[str, Any] = {
-        "model": settings.ollama_model,
+        "model": model,
         "messages": messages,
         "stream": False,
         "options": {"temperature": temperature},
@@ -113,6 +117,7 @@ async def _call_openai(
     messages: List[Dict[str, str]],
     settings: Settings,
     temperature: float,
+    model_override: str | None = None,
 ) -> str:
     if not settings.openai_api_key:
         raise HTTPException(
@@ -135,12 +140,13 @@ async def _call_openai(
         ) from exc
 
     try:
+        model = model_override or settings.chat_openai_model or settings.openai_model
         aclient = openai.AsyncOpenAI(
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url,
         )
         completion = await aclient.chat.completions.create(
-            model=settings.openai_model,
+            model=model,
             messages=messages,  # type: ignore[arg-type]
             temperature=temperature,
         )
